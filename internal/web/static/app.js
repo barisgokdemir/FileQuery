@@ -34,6 +34,7 @@ const el = {
   gecmisListesi: $('#gecmis-listesi'),
   gecmisBos: $('#gecmis-bos'),
   bildirim: $('#bildirim'),
+  suzgecDurum: $('#suzgec-durum'),
 };
 
 const KAYIT = {
@@ -53,6 +54,9 @@ const durum = {
   ilerleme: { scanned: 0, rows: 0 }, // son ilerleme mesajı
   sonuc: null, // 'tam' | 'kesik' | 'durduruldu'
   sanal: { satirY: 0, bas: -1, son: -1, istek: 0, genislikler: [] },
+  // Sütun süzgeçleri: tur[i] sütunun değer türü, kosul[i] derlenmiş süzgeç işlevi.
+  // gorunen: süzgeçten geçen satırlar; süzgeç yoksa null (o zaman satirlar gösterilir).
+  suzgec: { tur: [], kosul: [], gorunen: null, zaman: 0 },
   sekme: 'sql',
   olusturucu: null, // kurulduğunda { yenile }
   uretilenSorgu: null, // oluşturucunun editöre son yazdığı sorgu
@@ -516,6 +520,8 @@ async function calistir() {
   durum.sonuc = null;
   durum.sanal.bas = durum.sanal.son = -1;
   durum.sanal.genislikler = [];
+  durum.suzgec = { tur: [], kosul: [], gorunen: null, zaman: 0 };
+  suzgecDurumuYaz();
   el.govde.replaceChildren();
   el.tabloKap.scrollTop = 0;
   el.tablo.hidden = true;
@@ -583,6 +589,12 @@ function mesajIsle(m, sorgu) {
     el.bos.hidden = true;
   } else if (m.rows) {
     for (const r of m.rows) durum.satirlar.push(r);
+    turleriBelirle();
+    const sz = durum.suzgec;
+    if (sz.gorunen) {
+      for (const r of m.rows) if (satirGecerMi(r)) sz.gorunen.push(r);
+      suzgecDurumuYaz();
+    }
     cizimIste();
   } else if (m.progress) {
     durum.ilerleme = m.progress;
@@ -653,6 +665,7 @@ function basligiOlustur() {
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = c.name;
+    b.className = 'sutun-ad';
     b.addEventListener('click', () => {
       if (durum.satirlar.length < 50_000) return sirala(i);
       // Büyük listede sıralama bir iki saniye sürebilir; önce bilgiyi çiz.
@@ -665,12 +678,13 @@ function basligiOlustur() {
         document.body.style.cursor = '';
       }, 30);
     });
-    th.append(b);
+    th.append(b, suzgecAlani(i));
     return th;
   });
   if (s.yol >= 0 || (s.klasor >= 0 && s.ad >= 0)) {
     const th = document.createElement('th');
     th.setAttribute('aria-label', 'İşlemler');
+    th.className = 'islem-baslik';
     hucreler.push(th);
   }
   el.baslik.replaceChildren(...hucreler);
@@ -736,7 +750,8 @@ function boslukSatiri(yukseklik, sutunSayisi) {
 function ciz() {
   const v = durum.sanal;
   v.istek = 0;
-  const n = durum.satirlar.length;
+  const liste = gosterilenler();
+  const n = liste.length;
   if (!n || el.tablo.hidden) {
     el.govde.replaceChildren();
     v.bas = v.son = -1;
@@ -770,7 +785,7 @@ function ciz() {
   const yolVar = s.yol >= 0 || (s.klasor >= 0 && s.ad >= 0);
   const parca = document.createDocumentFragment();
   parca.append(boslukSatiri(ust, sutunSayisi));
-  for (let i = bas; i < son; i++) parca.append(satirOlustur(durum.satirlar[i], s, yolVar));
+  for (let i = bas; i < son; i++) parca.append(satirOlustur(liste[i], s, yolVar));
   parca.append(boslukSatiri(alt, sutunSayisi));
   el.govde.replaceChildren(parca);
 
@@ -807,6 +822,7 @@ function sirala(sutun) {
     return artan ? c : -c;
   });
   durum.satirlar = sira.map((i) => satirlar[i]);
+  if (durum.suzgec.gorunen) durum.suzgec.gorunen = durum.satirlar.filter(satirGecerMi);
   [...el.baslik.children].forEach((th, i) => {
     if (i < durum.sutunlar.length) th.setAttribute('aria-sort', i === sutun ? (artan ? 'ascending' : 'descending') : 'none');
   });
@@ -827,6 +843,106 @@ async function klasordeGoster(yol) {
   } catch (hata) {
     bildir(hata.message);
   }
+}
+
+// ---------- Sütun süzgeçleri ----------
+// Söz dizimi suzgec.js'te. Süzgeçler yalnızca tarayıcıdaki sonuçlara uygulanır; sorgu yeniden çalışmaz.
+
+function gosterilenler() {
+  return durum.suzgec.gorunen ?? durum.satirlar;
+}
+
+function satirGecerMi(r) {
+  const k = durum.suzgec.kosul;
+  for (let i = 0; i < k.length; i++) if (k[i] && !k[i](r[i])) return false;
+  return true;
+}
+
+// Her sütunun türünü ilk dolu değerinden belirler; tür belli olunca süzgeç alanı ona göre kurulur.
+function turleriBelirle() {
+  const sz = durum.suzgec;
+  durum.sutunlar.forEach((c, i) => {
+    if (sz.tur[i]) return;
+    for (const r of durum.satirlar) {
+      const t = degerTuru(r[i], c.isSize);
+      if (t) {
+        sz.tur[i] = t;
+        const eski = el.baslik.children[i]?.querySelector('.suzgec');
+        if (eski) eski.replaceWith(suzgecAlani(i));
+        return;
+      }
+    }
+  });
+}
+
+function suzgecAlani(i) {
+  const tur = durum.suzgec.tur[i] || 'metin';
+  const ad = durum.sutunlar[i].name;
+  let alan;
+  if (tur === 'mantik') {
+    alan = document.createElement('select');
+    for (const [deger, metin] of [['', 'Tümü'], ['evet', 'evet'], ['hayır', 'hayır']]) {
+      alan.append(new Option(metin, deger));
+    }
+    alan.addEventListener('change', () => suzgecDegisti(i, alan));
+  } else {
+    alan = document.createElement('input');
+    alan.type = 'search';
+    alan.placeholder = SUZGEC_ORNEK[tur];
+    alan.spellcheck = false;
+    alan.autocomplete = 'off';
+    alan.addEventListener('input', () => {
+      clearTimeout(durum.suzgec.zaman);
+      durum.suzgec.zaman = setTimeout(() => suzgecDegisti(i, alan), 150);
+    });
+    alan.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && alan.value) {
+        e.stopPropagation();
+        alan.value = '';
+        suzgecDegisti(i, alan);
+      }
+    });
+  }
+  alan.className = 'suzgec';
+  alan.dataset.sutun = i;
+  alan.title = SUZGEC_IPUCU[tur];
+  alan.setAttribute('aria-label', `${ad} sütununu süz`);
+  return alan;
+}
+
+function suzgecDegisti(i, alan) {
+  const tur = durum.suzgec.tur[i] || 'metin';
+  const sonuc = suzgecDerle(alan.value, tur);
+  alan.classList.toggle('hatali', !!sonuc?.hata);
+  alan.title = sonuc?.hata ? `${sonuc.hata}\n\n${SUZGEC_IPUCU[tur]}` : SUZGEC_IPUCU[tur];
+  alan.classList.toggle('dolu', !!sonuc && !sonuc.hata);
+  durum.suzgec.kosul[i] = sonuc?.f || null; // hatalı süzgeç uygulanmaz
+  suzgecUygula();
+}
+
+function suzgecUygula() {
+  const sz = durum.suzgec;
+  sz.gorunen = sz.kosul.some(Boolean) ? durum.satirlar.filter(satirGecerMi) : null;
+  el.tabloKap.scrollTop = 0;
+  suzgecDurumuYaz();
+  cizimIste(true);
+}
+
+function suzgecleriTemizle() {
+  $$('#baslik .suzgec').forEach((a) => {
+    a.value = '';
+    a.classList.remove('hatali', 'dolu');
+  });
+  durum.suzgec.kosul = [];
+  suzgecUygula();
+}
+
+function suzgecDurumuYaz() {
+  const g = durum.suzgec.gorunen;
+  el.suzgecDurum.hidden = !g;
+  if (!g) return;
+  el.suzgecDurum.querySelector('.sayi').textContent =
+    `${sayi.format(g.length)} / ${sayi.format(durum.satirlar.length)}`;
 }
 
 // ---------- Dışa aktarma ----------
@@ -882,7 +998,7 @@ function dosyaUret(bicim) {
   if (bicim === 'json') {
     const anahtarlar = adlar.map((a) => JSON.stringify(a));
     parcalar.push('[');
-    durum.satirlar.forEach((r, j) => {
+    gosterilenler().forEach((r, j) => {
       const alanlar = r.map((v, i) => {
         let d = v ?? null;
         if (d && typeof d === 'object') d = 't' in d ? d.t : d.d;
@@ -890,7 +1006,7 @@ function dosyaUret(bicim) {
       });
       parcalar.push(`${j ? ',' : ''}\n  {${alanlar.join(', ')}}`);
     });
-    parcalar.push(durum.satirlar.length ? '\n]\n' : ']\n');
+    parcalar.push(gosterilenler().length ? '\n]\n' : ']\n');
     return { parcalar, tur: 'application/json;charset=utf-8', uzanti: 'json' };
   }
   const excel = bicim === 'excel';
@@ -900,7 +1016,7 @@ function dosyaUret(bicim) {
   const satir = (alanlar) => alanlar.map((f) => csvAlani(f, ayrac, excel)).join(ayrac) + son;
   if (excel) parcalar.push('﻿');
   parcalar.push(satir(adlar));
-  for (const r of durum.satirlar) parcalar.push(satir(r.map(deger)));
+  for (const r of gosterilenler()) parcalar.push(satir(r.map(deger)));
   return { parcalar, tur: 'text/csv;charset=utf-8', uzanti: 'csv' };
 }
 
@@ -931,7 +1047,9 @@ function disaAktarBaglantilari() {
       if (durum.sonuc === 'kesik') {
         // Tamamı tarayıcıda yok: sunucu sorguyu yeniden çalıştırıp dosyayı akıtır.
         a.href = `/api/export?format=${a.dataset.bicim}&q=${encodeURIComponent(durum.sonSorgu)}`;
-        bildir('Tüm sonuçlar için sorgu yeniden çalıştırılıyor; dosya hazır olunca inecek.');
+        bildir(durum.suzgec.gorunen
+          ? 'Tüm sonuçlar için sorgu yeniden çalıştırılıyor; sütun süzgeçleri bu dosyaya uygulanmaz.'
+          : 'Tüm sonuçlar için sorgu yeniden çalıştırılıyor; dosya hazır olunca inecek.');
         return;
       }
       e.preventDefault();
@@ -992,6 +1110,7 @@ function baslat() {
   }).observe(el.sorgu);
 
   el.tabloKap.addEventListener('scroll', () => cizimIste(), { passive: true });
+  el.suzgecDurum.querySelector('button').addEventListener('click', suzgecleriTemizle);
   new ResizeObserver(() => cizimIste()).observe(el.tabloKap);
 
   el.calistir.addEventListener('click', calistir);

@@ -33,9 +33,25 @@ Komut satırından `fq --web` ile de başlatılabilir. Arayüzü kapatmak için 
 - Sonuçlar bulundukça tabloya akar; canlı "taranan / bulunan" sayacı ve **Durdur** (Esc) düğmesi
 - Yüz binlerce satırlık sonuçlar da akıcı kayar (yalnızca ekranda görünen satırlar çizilir)
 - Sütun başlığına tıklayarak sıralama, satırdaki **Klasörde göster** ile dosyayı Gezgin'de seçili açma
+- **Sütun süzgeçleri:** her sütunun altındaki kutu, sütunun türüne göre çalışır ve sorguyu yeniden çalıştırmadan
+  sonuçları anında daraltır (aşağıdaki tablo). Birden çok sütun birlikte kullanılabilir; dışa aktarma süzülmüş
+  satırları içerir
 - **Excel** (Türkçe Excel'in doğrudan açtığı `;` ayraçlı UTF-8 CSV), CSV ve JSON olarak dışa aktarma; dosya
   tablodaki sonuçlardan ve sıralamayla anında üretilir, arama tekrarlanmaz
 - Hatalı sorguda hatanın yeri editörde işaretlenir; alanlar paneli, sorgu geçmişi, açık ve koyu tema
+
+| Sütun türü | Örnekler |
+|---|---|
+| Metin | `fatura` (içerir), `=rapor.pdf` (tam), `^IMG` (ile başlar), `.pdf$` (ile biter), `fatura*2024` (joker) |
+| Sayı | `5`, `>10`, `<=100`, `5..10` |
+| Boyut | `>10 MB`, `<500 KB`, `1 GB..2 GB`, `1,5 MB` (tabloda 1,5 MB görünenler) |
+| Tarih | `2024`, `03.2024`, `15.03.2024`, `>01.06.2024`, `01.01.2024..31.03.2024`, `son 7g`, `bugün`, `dün` |
+| Süre | `>7g`, `<12sa`, `1g..3g`, `1g 6sa` |
+| Evet/hayır | açılır listeden seçilir |
+
+Bütün türlerde `!` ile tersi (`!tmp`, `!0`), `|` ile "veya" (`pdf | docx`, `2021 | 2023`) yazılabilir.
+Metin aramaları büyük/küçük harf duyarsızdır ve Türkçe harfleri doğru eşler (`IŞIK` → `ışık.txt`).
+Hatalı yazılan süzgeç kırmızıyla işaretlenir ve uygulanmaz; kutunun üzerine gelince söz dizimi görünür.
 
 Güvenlik: Arayüz yalnızca bu bilgisayardan (`127.0.0.1`) erişilebilir. Her açılışta rastgele bir oturum anahtarı
 üretilir ve konsoldaki adrese eklenir; anahtarı olmayan istekler ve başka sitelerden gelen istekler reddedilir.
@@ -228,6 +244,8 @@ artırıp `main`'e göndermek yeterli: CI etiketi oluşturur ve Windows, Linux, 
 dosyaları Release'e ekler.
 
 ## Geçmiş
+
+**v2.1.5 (2026):** Sonuç tablosunda sütun türüne göre çalışan süzgeçler (metin, sayı, boyut, tarih, süre, evet/hayır).
 
 **v2.1.4 (2026):** Arayüzde 10.000 satır sınırı kalktı: sanal kaydırma, 1.000.000 satıra kadar gösterim ve sınır
 aşıldığında gerçek toplam; Durdur'da bulunan ve taranan sayısı; dışa aktarma aramayı tekrarlamadan anında.

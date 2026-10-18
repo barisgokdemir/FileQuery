@@ -299,6 +299,7 @@ kbd {
   font-size: 13px;
 }
 .dugme-kucuk:hover { border-color: var(--manila); }
+button.dugme-kucuk { background: transparent; cursor: pointer; font-family: inherit; }
 
 .uyari {
   margin: 0;
@@ -331,9 +332,10 @@ kbd {
   font-weight: 600;
   white-space: nowrap;
 }
-.tablo th button {
+.tablo th button.sutun-ad {
+  display: block;
   width: 100%;
-  padding: 8px 12px;
+  padding: 8px 12px 4px;
   border: 0;
   background: transparent;
   text-align: inherit;
@@ -344,6 +346,30 @@ kbd {
 .tablo th[aria-sort="ascending"] button::after { content: " ▲"; font-size: 10px; color: var(--manila-koyu); }
 .tablo th[aria-sort="descending"] button::after { content: " ▼"; font-size: 10px; color: var(--manila-koyu); }
 .tablo th.sag, .tablo td.sag { text-align: right; }
+.tablo th.islem-baslik { vertical-align: bottom; }
+
+/* Sütun süzgeçleri */
+.tablo .suzgec {
+  display: block;
+  width: calc(100% - 16px);
+  min-width: 72px;
+  margin: 0 8px 7px;
+  padding: 3px 7px;
+  border: 1px solid var(--cizgi);
+  border-radius: 5px;
+  background: var(--yuzey);
+  color: var(--murekkep);
+  font: 400 12.5px/1.4 var(--kod);
+  text-align: left;
+}
+.tablo th.sag .suzgec { text-align: right; }
+.tablo .suzgec::placeholder { color: var(--soluk); opacity: 0.7; }
+.tablo .suzgec:focus { outline: 2px solid var(--manila); outline-offset: -1px; border-color: var(--manila); }
+.tablo .suzgec.dolu { border-color: var(--manila-koyu); background: var(--manila-acik); }
+.tablo .suzgec.hatali { border-color: #c0392b; background: color-mix(in srgb, #c0392b 10%, var(--yuzey)); }
+select.suzgec { font-family: inherit; cursor: pointer; }
+.suzgec-durum { margin: 0 auto 0 0; font-size: 13px; color: var(--soluk); display: flex; align-items: center; gap: 8px; }
+.suzgec-durum strong { color: var(--murekkep); font-variant-numeric: tabular-nums; }
 
 .tablo td {
   padding: 6px 12px;
