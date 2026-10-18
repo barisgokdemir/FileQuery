@@ -1,0 +1,6 @@
+/fq
+/fq.exe
+/build/
+/dist/
+*.test
+*.out
