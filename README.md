@@ -2,7 +2,44 @@
 
 [![CI](https://github.com/barisgokdemir/FileQuery/actions/workflows/ci.yml/badge.svg)](https://github.com/barisgokdemir/FileQuery/actions/workflows/ci.yml)
 
-Dosya sisteminde SQL ile arama. Windows, Linux ve macOS'ta çalışan, tek dosyalık, bağımlılıksız bir komut satırı aracı.
+Dosya sisteminde SQL ile arama. Windows, Linux ve macOS'ta çalışan, tek dosyalık, bağımlılıksız bir araç:
+tarayıcıda grafik arayüzle ya da komut satırından kullanılır.
+
+![FileQuery arayüzü](docs/arayuz.png)
+
+## Kurulum
+
+[Releases](https://github.com/barisgokdemir/FileQuery/releases/latest) sayfasından işletim sisteminize uygun dosyayı
+indirin (Windows için `fq-…-windows-amd64.zip`) ve zip'i açın. Kurulum gerekmez: arayüz için `fq.exe`'ye çift
+tıklamanız yeterli. Komut satırından her klasörde kullanmak isterseniz `fq.exe`'yi PATH'teki bir klasöre koyun.
+Go yüklüyse:
+
+```bash
+go install github.com/barisgokdemir/FileQuery/cmd/fq@latest
+```
+
+## Arayüz
+
+Windows'ta **`fq.exe`'ye çift tıklayın**: bir konsol penceresi açılır ve tarayıcınızda arayüz kendiliğinden gelir.
+Komut satırından `fq --web` ile de başlatılabilir. Arayüzü kapatmak için konsol penceresini kapatmanız yeterli.
+
+- Renklendirmeli sorgu editörü, **Ctrl+Enter** ile çalıştırma, hazır örnek sorgular
+- Sonuçlar bulundukça tabloya akar; canlı "taranan / bulunan" sayacı ve **Durdur** (Esc) düğmesi
+- Sütun başlığına tıklayarak sıralama, satırdaki **Klasörde göster** ile dosyayı Gezgin'de seçili açma
+- **Excel** (Türkçe Excel'in doğrudan açtığı `;` ayraçlı UTF-8 CSV), CSV ve JSON olarak dışa aktarma
+- Hatalı sorguda hatanın yeri editörde işaretlenir; alanlar paneli, sorgu geçmişi, açık ve koyu tema
+
+Güvenlik: Arayüz yalnızca bu bilgisayardan (`127.0.0.1`) erişilebilir. Her açılışta rastgele bir oturum anahtarı
+üretilir ve konsoldaki adrese eklenir; anahtarı olmayan istekler ve başka sitelerden gelen istekler reddedilir.
+Arayüz dosya silmez veya değiştirmez, dosya açmaz; yalnızca arar ve klasörde gösterir.
+
+| Seçenek | Açıklama |
+|---|---|
+| `--web` | arayüzü başlatır ve tarayıcıyı açar |
+| `--port 8080` | sabit bir port kullanır (varsayılan: boş bir port) |
+| `--no-browser` | arayüzü başlatır ama tarayıcıyı açmaz |
+
+## Komut satırı
 
 ```
 > fq "SELECT name, size, modified FROM 'C:\Users\baris\Downloads' WHERE size > 500 MB ORDER BY size DESC LIMIT 3"
@@ -13,15 +50,6 @@ ubuntu-24.04-desktop.iso   5,7 GB  2024-05-02 21:14
 yedek-2023.zip             2,1 GB  2024-01-15 09:30
 sunum-kaydi.mp4          812,4 MB  2024-03-08 17:02
 3 sonuç, 48.213 öğe tarandı, 0,41 sn
-```
-
-## Kurulum
-
-[Releases](https://github.com/barisgokdemir/FileQuery/releases) sayfasından işletim sisteminize uygun dosyayı indirin
-ve içindeki `fq.exe` (Windows) veya `fq` dosyasını PATH'teki bir klasöre koyun. Go yüklüyse:
-
-```bash
-go install github.com/barisgokdemir/FileQuery/cmd/fq@latest
 ```
 
 ## Örnekler
@@ -48,9 +76,10 @@ AND size BETWEEN 10 MB AND 100 MB AND ext IN ('mp4', 'mkv')
 SELECT YEAR(modified) AS yil, COUNT(*) FROM '~/Documents' GROUP BY YEAR(modified) ORDER BY yil
 ```
 
-Sonuçları başka araçlara aktarmak için `--csv` veya `--json`:
+Sonuçları başka araçlara aktarmak için `--csv`, `--json` veya Türkçe Excel için `--format excel`:
 
 ```bash
+fq --format excel "SELECT path, size FROM '.' WHERE size > 1 GB" > buyuk-dosyalar.csv
 fq --csv "SELECT path, size FROM '.' WHERE size > 1 GB" > buyuk-dosyalar.csv
 fq --json "SELECT name, modified FROM '.' WHERE ext = 'log'" | jq '.[].name'
 ```
@@ -142,14 +171,18 @@ SELECT nmae FROM 'C:\Users' WHERE ext = 'pdf'
 - **Güvenlik ve dayanıklılık:** Sembolik bağlantılar ve Windows junction'ları izlenmez, bu yüzden tarama döngüye girmez.
   Erişim izni olmayan klasörler atlanır ve sonunda raporlanır (`-v` ile liste).
 - **Akış:** `ORDER BY` veya `GROUP BY` yoksa CSV/JSON sonuçları bulundukça yazılır; `LIMIT` dolduğunda tarama durur.
+- **Arayüz:** Go'nun `embed` paketiyle binary'ye gömülü, çerçevesiz HTML/CSS/JS. Sonuçlar satır satır JSON (NDJSON)
+  olarak akar; tarayıcı bağlantıyı kapatınca (Durdur) tarama da durur. Tarayıcıya gönderilen satır sayısı 10.000 ile
+  sınırlıdır, tamamı dışa aktarılabilir.
 - **Bağımlılık yok:** Sadece Go standart kütüphanesi. Windows'a özgü bilgiler (öznitelikler, sahip, hardlink)
   `syscall` ile okunur.
 
 ```
-cmd/fq/            komut satırı ve etkileşimli kip
+cmd/fq/            komut satırı, etkileşimli kip, çift tıklama algılama
 internal/query/    lexer, parser, sözdizimi ağacı, değer tipleri
 internal/engine/   paralel tarayıcı, ifade değerlendirici, toplama; platforma özel dosya bilgileri
-internal/output/   tablo, CSV ve JSON çıktısı
+internal/output/   tablo, CSV, Excel ve JSON çıktısı
+internal/web/      yerel HTTP sunucusu, NDJSON akış API'si; arayüz (HTML/CSS/JS) binary'ye gömülü
 ```
 
 ## Geliştirme
@@ -164,6 +197,8 @@ artırıp `main`'e göndermek yeterli: CI etiketi oluşturur ve Windows, Linux, 
 dosyaları Release'e ekler.
 
 ## Geçmiş
+
+**v2.1 (2026):** Tarayıcıda grafik arayüz (`fq --web`, Windows'ta çift tıklama), Excel uyumlu dışa aktarma.
 
 **v2.0 (2026):** Go ile sıfırdan yazıldı: gerçek bir sorgu dili, paralel tarama, toplama fonksiyonları,
 etkileşimli kip, testler ve çapraz platform derleme.

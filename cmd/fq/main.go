@@ -25,11 +25,15 @@ const usageText = `FileQuery: dosya sisteminde SQL ile arama
 
 Kullanım:
   fq [seçenekler] "SORGU"      sorguyu çalıştırır
-  fq                           etkileşimli kipi açar
+  fq --web                     tarayıcıda grafik arayüzü açar
+  fq                           etkileşimli kipi açar (Windows'ta çift tıklayınca arayüz açılır)
   echo "SORGU" | fq            sorguyu standart girdiden okur
 
 Seçenekler:
-  --format tablo|csv|json      çıktı biçimi (varsayılan: tablo)
+  --web                        tarayıcı arayüzünü başlatır (sadece bu bilgisayardan erişilir)
+  --port N                     arayüz için port (varsayılan: boş bir port)
+  --no-browser                 arayüzü başlatır ama tarayıcıyı açmaz
+  --format tablo|csv|excel|json  çıktı biçimi (varsayılan: tablo; excel = Türkçe Excel için ; ayraçlı CSV)
   --csv, --json                --format kısayolları
   -v                           erişilemeyen klasörleri listeler
   --alanlar                    sorgularda kullanılabilecek alanları listeler
@@ -78,6 +82,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, interactive b
 		jsonFlag    bool
 		showVersion bool
 		showFields  bool
+		webMode     bool
+		noBrowser   bool
+		port        int
 	)
 	fs.StringVar(&cfg.format, "format", "tablo", "")
 	fs.BoolVar(&csvFlag, "csv", false, "")
@@ -85,6 +92,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, interactive b
 	fs.BoolVar(&cfg.verbose, "v", false, "")
 	fs.BoolVar(&showVersion, "version", false, "")
 	fs.BoolVar(&showFields, "alanlar", false, "")
+	fs.BoolVar(&webMode, "web", false, "")
+	fs.BoolVar(&noBrowser, "no-browser", false, "")
+	fs.IntVar(&port, "port", 0, "")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -109,6 +119,18 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, interactive b
 	if showFields {
 		printFields(stdout)
 		return 0
+	}
+
+	// Double-clicking fq.exe opens the browser interface instead of a bare console.
+	if len(args) == 0 && interactive && startedFromExplorer() {
+		webMode = true
+	}
+	if webMode || noBrowser || port != 0 {
+		if len(fs.Args()) > 0 {
+			fmt.Fprintln(stderr, "fq: --web ile birlikte sorgu verilemez; sorguyu arayüzde yazın")
+			return 2
+		}
+		return runWeb(port, !noBrowser, stdout, stderr)
 	}
 
 	src := strings.TrimSpace(strings.Join(fs.Args(), " "))

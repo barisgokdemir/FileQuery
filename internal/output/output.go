@@ -23,17 +23,26 @@ type Writer interface {
 	End() error
 }
 
-// New returns a writer for the given format: "table", "csv" or "json".
+// New returns a writer for the given format: "table", "csv", "excel" or "json".
+//
+// "excel" is CSV that Excel opens correctly with Turkish regional settings:
+// semicolon-separated, with a UTF-8 byte order mark so Turkish letters are
+// not garbled.
 func New(format string, w io.Writer) (Writer, error) {
 	switch strings.ToLower(format) {
 	case "table", "tablo", "":
 		return &tableWriter{w: w}, nil
 	case "csv":
 		return &csvWriter{w: csv.NewWriter(w)}, nil
+	case "excel":
+		cw := csv.NewWriter(w)
+		cw.Comma = ';'
+		cw.UseCRLF = true
+		return &csvWriter{w: cw, bom: w}, nil
 	case "json":
 		return &jsonWriter{w: bufio.NewWriter(w)}, nil
 	}
-	return nil, fmt.Errorf("bilinmeyen çıktı biçimi %q; tablo, csv veya json kullanın", format)
+	return nil, fmt.Errorf("bilinmeyen çıktı biçimi %q; tablo, csv, excel veya json kullanın", format)
 }
 
 // ---------- Table ----------
@@ -188,10 +197,16 @@ func FormatDuration(d time.Duration) string {
 type csvWriter struct {
 	w    *csv.Writer
 	cols []engine.Column
+	bom  io.Writer // when set, a UTF-8 BOM is written first (for Excel)
 }
 
 func (c *csvWriter) Begin(cols []engine.Column) error {
 	c.cols = cols
+	if c.bom != nil {
+		if _, err := c.bom.Write([]byte("\xEF\xBB\xBF")); err != nil {
+			return err
+		}
+	}
 	header := make([]string, len(cols))
 	for i, col := range cols {
 		header[i] = col.Name
@@ -202,7 +217,11 @@ func (c *csvWriter) Begin(cols []engine.Column) error {
 func (c *csvWriter) Row(values []query.Value) error {
 	rec := make([]string, len(values))
 	for i, v := range values {
-		rec[i] = raw(v)
+		if c.bom != nil {
+			rec[i] = excelCell(v)
+		} else {
+			rec[i] = raw(v)
+		}
 	}
 	return c.w.Write(rec)
 }
@@ -231,6 +250,23 @@ func raw(v query.Value) string {
 		return strconv.FormatFloat(time.Duration(v.I).Seconds(), 'f', -1, 64)
 	}
 	return v.String()
+}
+
+// excelCell formats values so Turkish Excel recognizes them: decimal comma
+// and a date format it parses.
+func excelCell(v query.Value) string {
+	switch v.Kind {
+	case query.KindFloat:
+		return strings.Replace(strconv.FormatFloat(v.F, 'f', -1, 64), ".", ",", 1)
+	case query.KindTime:
+		return v.T.Local().Format("02.01.2006 15:04:05")
+	case query.KindBool:
+		if v.B {
+			return "evet"
+		}
+		return "hayır"
+	}
+	return raw(v)
 }
 
 // ---------- JSON ----------

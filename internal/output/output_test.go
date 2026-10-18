@@ -1,8 +1,13 @@
 package output
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/barisgokdemir/FileQuery/internal/engine"
+	"github.com/barisgokdemir/FileQuery/internal/query"
 )
 
 func TestFormatSize(t *testing.T) {
@@ -33,5 +38,25 @@ func TestFormatDuration(t *testing.T) {
 		if got := FormatDuration(in); got != want {
 			t.Errorf("FormatDuration(%v) = %s, want %s", in, got, want)
 		}
+	}
+}
+
+func TestExcelCSV(t *testing.T) {
+	var buf bytes.Buffer
+	w, err := New("excel", &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tm, _ := query.ParseTime("2024-03-15 14:30")
+	w.Begin([]engine.Column{{Name: "ad"}, {Name: "boyut", IsSize: true}, {Name: "tarih"}, {Name: "oran"}})
+	w.Row([]query.Value{query.String("şeker;tuz.txt"), query.Int(2048), query.Time(tm), query.Float(1.5)})
+	w.End()
+	got := buf.String()
+	if !strings.HasPrefix(got, "\xEF\xBB\xBF") {
+		t.Fatal("BOM yok")
+	}
+	want := "ad;boyut;tarih;oran\r\n\"şeker;tuz.txt\";2048;15.03.2024 14:30:00;1,5\r\n"
+	if strings.TrimPrefix(got, "\xEF\xBB\xBF") != want {
+		t.Errorf("excel csv\n got: %q\nwant: %q", got, want)
 	}
 }
