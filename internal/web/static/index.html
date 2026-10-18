@@ -6,6 +6,8 @@
   <title>FileQuery</title>
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/ornekler.js" defer></script>
+  <script src="/static/olusturucu.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
@@ -16,6 +18,7 @@
       <span class="surum" id="surum"></span>
     </div>
     <nav class="ust-dugmeler" aria-label="Paneller">
+      <button type="button" class="dugme-sade" data-panel="ornekler" aria-expanded="false">Örnekler</button>
       <button type="button" class="dugme-sade" data-panel="alanlar" aria-expanded="false">Alanlar</button>
       <button type="button" class="dugme-sade" data-panel="gecmis" aria-expanded="false">Geçmiş</button>
       <button type="button" class="dugme-sade tema-dugme" id="tema" title="Temayı değiştir" aria-label="Temayı değiştir">
@@ -26,6 +29,15 @@
 
   <main class="duzen">
     <section class="sorgu-alani" aria-label="Sorgu">
+      <div class="sekmeler" role="tablist" aria-label="Sorgu yazma biçimi">
+        <button type="button" role="tab" class="sekme" id="sekme-sql" data-sekme="sql" aria-selected="true" aria-controls="editor">SQL</button>
+        <button type="button" role="tab" class="sekme" id="sekme-olusturucu" data-sekme="olusturucu" aria-selected="false" aria-controls="olusturucu">Sorgu oluşturucu</button>
+        <span class="sekme-not" id="sekme-not"></span>
+      </div>
+
+      <div class="olusturucu" id="olusturucu" role="tabpanel" aria-labelledby="sekme-olusturucu" hidden></div>
+      <p class="onizleme-baslik" id="onizleme-baslik" hidden>Oluşturulan sorgu <span>(isterseniz burada düzenleyebilirsiniz)</span></p>
+
       <div class="editor" id="editor">
         <pre class="vurgu" aria-hidden="true"><code id="vurgu"></code></pre>
         <textarea id="sorgu" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Sorgu"
@@ -83,6 +95,15 @@
     <div class="cekmece-ust">
       <h2 id="cekmece-baslik"></h2>
       <button type="button" class="dugme-sade" id="cekmece-kapat" aria-label="Paneli kapat">✕</button>
+    </div>
+    <div class="cekmece-icerik" id="cekmece-ornekler" hidden>
+      <div class="sistem-secici" role="radiogroup" aria-label="İşletim sistemi">
+        <button type="button" role="radio" data-sistem="windows">Windows</button>
+        <button type="button" role="radio" data-sistem="linux">Linux</button>
+        <button type="button" role="radio" data-sistem="darwin">macOS</button>
+      </div>
+      <p class="cekmece-not" id="sistem-notu"></p>
+      <div id="ornek-listesi"></div>
     </div>
     <div class="cekmece-icerik" id="cekmece-alanlar" hidden>
       <p class="cekmece-not">Tıklayınca imlecin olduğu yere eklenir.</p>
