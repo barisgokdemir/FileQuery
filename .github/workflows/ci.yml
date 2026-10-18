@@ -96,8 +96,23 @@ jobs:
         env:
           VERSION: ${{ steps.surum.outputs.version }}
         run: |
+          # GitHub'ın otomatik notları PR başlıklarındaki @kelimeleri kullanıcı adı sanıp o kişileri
+          # Contributors listesine ekler ve onlara bildirim gönderir (ör. "@resim" listesi).
+          # Repo sahibi dışındaki @ifadeler kod biçimine çevrilir.
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="v$VERSION" \
+            -f target_commitish="$GITHUB_SHA" --jq .body > notlar.md
+          python3 - "$GITHUB_REPOSITORY_OWNER" notlar.md <<'PY'
+          import re, sys
+          owner, path = sys.argv[1].lower(), sys.argv[2]
+          text = open(path, encoding="utf-8").read()
+          def fix(m):
+              return m.group(0) if m.group(1).lower() == owner else f"`@{m.group(1)}`"
+          text = re.sub(r"(?<![\w`/])@([A-Za-z0-9][A-Za-z0-9-]*)", fix, text)
+          open(path, "w", encoding="utf-8").write(text)
+          PY
+          cat notlar.md
           gh release create "v$VERSION" dist/* --target "$GITHUB_SHA" \
-            --title "FileQuery v$VERSION" --generate-notes
+            --title "FileQuery v$VERSION" --notes-file notlar.md
 
   # İlk sürüm (2021, PHP) için etiket ve Release oluşturur. Bir kez çalışır, sonra atlanır.
   v1-arsiv:
