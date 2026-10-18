@@ -137,6 +137,9 @@ func TestFlags(t *testing.T) {
 	if code, _, errOut := fq(t, "", false, "--format", "xml", "SELECT name FROM '.'"); code != 2 || !strings.Contains(errOut, "xml") {
 		t.Errorf("geçersiz biçim: %d %q", code, errOut)
 	}
+	if code, _, errOut := fq(t, "", false, "--web", "SELECT name FROM '.'"); code != 2 || !strings.Contains(errOut, "arayüzde") {
+		t.Errorf("--web ile sorgu: %d %q", code, errOut)
+	}
 	if code, _, errOut := fq(t, "", false, "-h"); code != 0 || !strings.Contains(errOut, "Kullanım") {
 		t.Errorf("-h: %d", code)
 	}

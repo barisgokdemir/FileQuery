@@ -143,8 +143,9 @@ func expandPath(p string) string {
 // Scan walks the given root directories with a pool of workers and calls
 // visit for every entry. visit is called concurrently and must be safe for
 // that; returning false stops the scan (used for LIMIT). maxDepth 0 means
-// unlimited.
-func Scan(ctx context.Context, roots []string, maxDepth int, visit func(*Entry) bool) ScanStats {
+// unlimited. If progress is not nil it is incremented for every entry seen,
+// so callers can show a live counter.
+func Scan(ctx context.Context, roots []string, maxDepth int, progress *atomic.Int64, visit func(*Entry) bool) ScanStats {
 	var (
 		stats    ScanStats
 		deniedMu sync.Mutex
@@ -152,6 +153,9 @@ func Scan(ctx context.Context, roots []string, maxDepth int, visit func(*Entry) 
 		dirs     atomic.Int64
 		denied   atomic.Int64
 	)
+	if progress == nil {
+		progress = new(atomic.Int64)
+	}
 
 	q := newWorkQueue()
 	for _, r := range roots {
@@ -179,6 +183,7 @@ func Scan(ctx context.Context, roots []string, maxDepth int, visit func(*Entry) 
 				dirs.Add(1)
 				err := readDir(job.path, func(de fs.DirEntry) bool {
 					entries.Add(1)
+					progress.Add(1)
 					e := newEntry(job.path, de, job.depth)
 					if !visit(e) {
 						q.stop()

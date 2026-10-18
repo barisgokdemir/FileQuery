@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/barisgokdemir/FileQuery/internal/query"
@@ -29,6 +30,10 @@ type Options struct {
 	// SortByPath orders rows by path when the query has no ORDER BY, so that
 	// table output is stable. Rows are then buffered instead of streamed.
 	SortByPath bool
+
+	// Progress, when set, is incremented for every scanned entry while the
+	// query runs.
+	Progress *atomic.Int64
 }
 
 // Run executes q and calls emit for every result row, in order. emit is never
@@ -52,7 +57,7 @@ func Run(ctx context.Context, q *query.Query, opts Options, emit func([]query.Va
 		err   error
 	)
 	if isAggregateQuery(q, items) {
-		stats, err = runAggregate(ctx, q, items, roots, ev, emit)
+		stats, err = runAggregate(ctx, q, items, roots, ev, opts, emit)
 	} else {
 		stats, err = runPlain(ctx, q, items, roots, ev, opts, emit)
 	}
@@ -161,7 +166,7 @@ func runPlain(ctx context.Context, q *query.Query, items []query.SelectItem, roo
 		failure errorOnce
 	)
 
-	scanStats := Scan(ctx, roots, q.Depth, func(e *Entry) bool {
+	scanStats := Scan(ctx, roots, q.Depth, opts.Progress, func(e *Entry) bool {
 		s := scope{row: e}
 		ok, err := matchesWhere(ev, q.Where, s)
 		if err != nil {
@@ -250,7 +255,7 @@ func runPlain(ctx context.Context, q *query.Query, items []query.SelectItem, roo
 }
 
 func runAggregate(ctx context.Context, q *query.Query, items []query.SelectItem, roots []string,
-	ev *evaluator, emit func([]query.Value) error) (Stats, error) {
+	ev *evaluator, opts Options, emit func([]query.Value) error) (Stats, error) {
 
 	exprs := make([]query.Expr, 0, len(items)+len(q.OrderBy))
 	for _, it := range items {
@@ -273,7 +278,7 @@ func runAggregate(ctx context.Context, q *query.Query, items []query.SelectItem,
 		order = append(order, "")
 	}
 
-	scanStats := Scan(ctx, roots, q.Depth, func(e *Entry) bool {
+	scanStats := Scan(ctx, roots, q.Depth, opts.Progress, func(e *Entry) bool {
 		s := scope{row: e}
 		ok, err := matchesWhere(ev, q.Where, s)
 		if err != nil {
