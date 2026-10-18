@@ -35,11 +35,16 @@ func newEntry(dir string, de fs.DirEntry, depth int) *Entry {
 }
 
 // IsDir reports whether the entry is a directory that can be descended into.
-// Symbolic links, junctions and other reparse points are never followed, so
-// scans cannot loop.
+//
+// Symbolic links, junctions and mount points are never followed, so scans
+// cannot loop. On Windows, Go never sets ModeDir on those "name surrogate"
+// reparse points, so ModeDir alone already excludes them. Directories with
+// other reparse tags, such as OneDrive / cloud-file placeholders, are reported
+// as ModeDir|ModeIrregular: they are real directories (Desktop and Documents
+// are often redirected to OneDrive) and must be scanned.
 func (e *Entry) IsDir() bool {
 	t := e.dirEntry.Type()
-	return t.IsDir() && t&(fs.ModeSymlink|fs.ModeIrregular) == 0
+	return t.IsDir() && t&fs.ModeSymlink == 0
 }
 
 func (e *Entry) fileInfo() fs.FileInfo {
@@ -79,11 +84,15 @@ func (e *Entry) Get(field string) query.Value {
 	case "type":
 		t := e.dirEntry.Type()
 		switch {
-		case t&(fs.ModeSymlink|fs.ModeIrregular) != 0:
+		case t&fs.ModeSymlink != 0:
 			return query.String("link")
 		case t.IsDir():
 			return query.String("dir")
+		case t&fs.ModeIrregular != 0 && isDirectoryReparsePoint(e.fileInfo()):
+			// Windows junctions and mount points: directories we do not follow.
+			return query.String("link")
 		}
+		// Includes OneDrive placeholders and other irregular files.
 		return query.String("file")
 	}
 

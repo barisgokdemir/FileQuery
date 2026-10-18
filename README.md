@@ -169,6 +169,7 @@ SELECT nmae FROM 'C:\Users' WHERE ext = 'pdf'
   sıralanmadan ve parça parça okunur. Dosya bilgisi (boyut, tarih) ve pahalı bilgiler (sahip, hardlink sayısı)
   sadece sorgu onlara ihtiyaç duyarsa okunur.
 - **Güvenlik ve dayanıklılık:** Sembolik bağlantılar ve Windows junction'ları izlenmez, bu yüzden tarama döngüye girmez.
+  OneDrive gibi bulut klasörleri ise normal klasör olarak taranır.
   Erişim izni olmayan klasörler atlanır ve sonunda raporlanır (`-v` ile liste).
 - **Akış:** `ORDER BY` veya `GROUP BY` yoksa CSV/JSON sonuçları bulundukça yazılır; `LIMIT` dolduğunda tarama durur.
 - **Arayüz:** Go'nun `embed` paketiyle binary'ye gömülü, çerçevesiz HTML/CSS/JS. Sonuçlar satır satır JSON (NDJSON)
@@ -197,6 +198,9 @@ artırıp `main`'e göndermek yeterli: CI etiketi oluşturur ve Windows, Linux, 
 dosyaları Release'e ekler.
 
 ## Geçmiş
+
+**v2.1.1 (2026):** Düzeltme: Windows'ta OneDrive'a yönlendirilmiş klasörler (Masaüstü, Belgeler) bağlantı sanılıp
+taranmıyordu.
 
 **v2.1 (2026):** Tarayıcıda grafik arayüz (`fq --web`, Windows'ta çift tıklama), Excel uyumlu dışa aktarma.
 

@@ -20,6 +20,9 @@ func stat(info fs.FileInfo) *syscall.Stat_t {
 	return st
 }
 
+// isDirectoryReparsePoint is a Windows concept; Unix has only symlinks.
+func isDirectoryReparsePoint(fs.FileInfo) bool { return false }
+
 func isHidden(name string, _ fs.FileInfo) bool { return strings.HasPrefix(name, ".") }
 func isReadOnly(info fs.FileInfo) bool         { return info.Mode().Perm()&0o222 == 0 }
 func isSystem(fs.FileInfo) bool                { return false }
