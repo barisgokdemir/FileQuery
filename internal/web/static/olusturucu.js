@@ -25,7 +25,9 @@
   const OPERATORLER = {
     metin: [['icerir', 'içerir'], ['baslar', 'ile başlar'], ['biter', 'ile biter'], ['esit', 'eşittir'],
       ['esitdegil', 'eşit değildir'], ['liste', 'şunlardan biri'], ['regex', 'düzenli ifadeye uyar']],
-    uzanti: [['liste', 'şunlardan biri'], ['listedegil', 'şunlardan biri değil']],
+    uzanti: [['liste', 'şunlardan biri'], ['listedegil', 'şunlardan biri değil'],
+      ['@resim', 'Resim (hazır liste)'], ['@video', 'Video (hazır liste)'], ['@ses', 'Ses (hazır liste)'],
+      ['@belge', 'Belge (hazır liste)'], ['@arsiv', 'Arşiv (hazır liste)']],
     boyut: [['buyuk', 'büyüktür'], ['kucuk', 'küçüktür'], ['arasinda', 'arasında'], ['sifir', 'boş (0 bayt)']],
     tarih: [['son', 'son … içinde'], ['eski', '… önceden eski'], ['bugun', 'bugün'], ['sonra', 'şu tarihten sonra'],
       ['once', 'şu tarihten önce'], ['arasinda', 'iki tarih arasında'], ['yil', 'şu yılda']],
@@ -134,6 +136,13 @@
         return null;
       }
       case 'uzanti': {
+        // Hazır liste: ext IN @resim; çıkarılan uzantılar NOT IN ile eklenir
+        if (String(k.op).startsWith('@')) {
+          const cikar = (k.cikar || []).filter((x) => /^[\p{L}\p{N}_]+$/u.test(x));
+          return cikar.length
+            ? `(${f} IN ${k.op} AND ${f} NOT IN (${cikar.map(q).join(', ')}))`
+            : `${f} IN ${k.op}`;
+        }
         const l = listeOku(v, true);
         if (!l.length) return null;
         if (k.op === 'listedegil') return l.length === 1 ? `${f} != ${q(l[0])}` : `${f} NOT IN (${l.map(q).join(', ')})`;
@@ -343,6 +352,7 @@
         case 'metin':
           return [metinGirdi('deger', k.op === 'liste' ? 'virgülle ayırın: a, b' : k.op === 'regex' ? '^rapor-\\d+' : 'metin')];
         case 'uzanti':
+          if (String(k.op).startsWith('@')) return [listeEtiketleri(k)];
           return [metinGirdi('deger', 'pdf, docx, xlsx')];
         case 'boyut': {
           if (k.op === 'sifir') return [];
@@ -372,6 +382,35 @@
       return [];
     }
 
+    // Hazır listedeki uzantılar etiket olarak gösterilir; × ile çıkarılır, tekrar tıklayınca geri gelir.
+    function listeEtiketleri(k) {
+      const kume = (ayarlar.kumeler || []).find((x) => `@${x.name}` === k.op);
+      if (!kume) return h('span', { class: 'ara-yazi' }, k.op);
+      k.cikar = (k.cikar || []).filter((x) => kume.exts.includes(x));
+      const etiketler = kume.exts.map((ext) => {
+        const cikti = k.cikar.includes(ext);
+        return h('button', {
+          type: 'button',
+          class: cikti ? 'uzanti-etiket cikarildi' : 'uzanti-etiket',
+          title: cikti ? `.${ext} geri ekle` : `.${ext} uzantısını çıkar`,
+          'aria-pressed': String(!cikti),
+          onclick: () => {
+            k.cikar = cikti ? k.cikar.filter((x) => x !== ext) : [...k.cikar, ext];
+            degisti(true);
+          },
+        }, ext, h('span', { 'aria-hidden': 'true' }, cikti ? '+' : '×'));
+      });
+      const ozet = k.cikar.length
+        ? `${kume.exts.length - k.cikar.length} / ${kume.exts.length} uzantı · çıkarılanlar: ${k.cikar.map((x) => `.${x}`).join(', ')}`
+        : `${kume.exts.length} uzantı · istemediğinize tıklayıp çıkarın`;
+      const geriAl = k.cikar.length
+        ? h('button', { type: 'button', class: 'dugme-sade', onclick: () => { k.cikar = []; degisti(true); } }, 'Hepsini geri al')
+        : null;
+      return h('div', { class: 'uzanti-etiketleri' },
+        h('div', { class: 'etiket-ozet' }, h('span', {}, ozet), geriAl),
+        h('div', { class: 'etiket-kutusu' }, etiketler));
+    }
+
     function kosulSatiri(k, i) {
       const alan = secim(KOSUL_ALANLARI.map((a) => [a, ETIKETLER[a]]), k.alan, (v) => {
         d.kosullar[i] = varsayilanKosul(v);
@@ -379,6 +418,7 @@
       }, { 'aria-label': 'Alan' });
       const op = secim(OPERATORLER[TURLER[k.alan]], k.op, (v) => {
         k.op = v;
+        if (v.startsWith('@')) k.cikar = [];
         if (TURLER[k.alan] === 'tarih') { k.deger = ''; k.deger2 = ''; }
         degisti(true);
       }, { 'aria-label': 'Koşul' });

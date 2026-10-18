@@ -349,16 +349,33 @@ func (p *parser) parsePredicate() (Expr, error) {
 
 	case p.isKeyword("IN"):
 		t := p.next()
-		if !p.accept(TokLParen) {
-			return nil, p.errorf(p.peek(), "IN sonrasında ( bekleniyordu, ör. ext IN ('pdf', 'docx')")
-		}
-		var list []Expr
-		for {
-			e, err := p.parseAdditive()
+		// ext IN @resim
+		if p.peek().Kind == TokSetRef {
+			list, err := p.parseSetRef()
 			if err != nil {
 				return nil, err
 			}
-			list = append(list, e)
+			return &In{X: left, List: list, Not: negated, pos: t.Pos}, nil
+		}
+		if !p.accept(TokLParen) {
+			return nil, p.errorf(p.peek(), "IN sonrasında ( veya hazır liste bekleniyordu, ör. ext IN ('pdf', 'docx') ya da ext IN @resim")
+		}
+		var list []Expr
+		for {
+			// ext IN (@resim, @video, 'pdf')
+			if p.peek().Kind == TokSetRef {
+				items, err := p.parseSetRef()
+				if err != nil {
+					return nil, err
+				}
+				list = append(list, items...)
+			} else {
+				e, err := p.parseAdditive()
+				if err != nil {
+					return nil, err
+				}
+				list = append(list, e)
+			}
 			if !p.accept(TokComma) {
 				break
 			}
@@ -385,6 +402,30 @@ func (p *parser) parsePredicate() (Expr, error) {
 	}
 
 	return left, nil
+}
+
+// parseSetRef expands @name into literal extensions.
+func (p *parser) parseSetRef() ([]Expr, error) {
+	t := p.next()
+	set, ok := LookupExtSet(t.Text)
+	if !ok {
+		msg := fmt.Sprintf("bilinmeyen hazır liste @%s", t.Text)
+		if s := suggest(t.Text, extSetNames()); s != "" {
+			msg += fmt.Sprintf(" (@%s mi demek istediniz?)", s)
+		} else {
+			names := make([]string, len(ExtSets))
+			for i, s := range ExtSets {
+				names[i] = "@" + s.Name
+			}
+			msg += "; kullanılabilenler: " + strings.Join(names, ", ")
+		}
+		return nil, p.errorf(t, "%s", msg)
+	}
+	list := make([]Expr, len(set.Exts))
+	for i, ext := range set.Exts {
+		list[i] = &Literal{Value: String(ext), pos: t.Pos}
+	}
+	return list, nil
 }
 
 func (p *parser) parseAdditive() (Expr, error) {
@@ -445,6 +486,9 @@ func (p *parser) parsePrimary() (Expr, error) {
 
 	case TokString:
 		return &Literal{Value: String(t.Text), pos: t.Pos}, nil
+
+	case TokSetRef:
+		return nil, p.errorf(t, "@%s gibi hazır listeler sadece IN ile kullanılabilir, ör. ext IN @%s", t.Text, t.Text)
 
 	case TokKeyword:
 		switch t.Text {

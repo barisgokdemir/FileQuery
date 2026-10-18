@@ -48,9 +48,6 @@
     return y;
   }
 
-  const BELGE = "('pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'odt', 'ods', 'txt')";
-  const FOTO = "('jpg', 'jpeg', 'png', 'heic', 'gif', 'webp', 'raw', 'cr2', 'nef')";
-  const VIDEO = "('mp4', 'mkv', 'mov', 'avi', 'wmv', 'webm')";
   const KOD = "('go', 'cs', 'js', 'ts', 'py', 'java', 'sql', 'php', 'html', 'css', 'cpp', 'c', 'rs')";
   const KURULUM = {
     windows: "('exe', 'msi', 'msix', 'zip', '7z', 'rar')",
@@ -79,7 +76,7 @@
         grup: 'Sık kullanılanlar',
         ad: 'Son değişen belgeler',
         aciklama: 'Belgeler klasöründe son 30 günde değişen Office, PDF ve metin dosyaları.',
-        sorgu: `SELECT name, modified, size, dir FROM ${s(y.documents)}\nWHERE ext IN ${BELGE} AND modified > NOW() - 30d\nORDER BY modified DESC`,
+        sorgu: `SELECT name, modified, size, dir FROM ${s(y.documents)}\nWHERE ext IN @belge AND modified > NOW() - 30d\nORDER BY modified DESC`,
       },
       {
         grup: 'Sık kullanılanlar',
@@ -107,15 +104,45 @@
       },
       {
         grup: 'Disk kullanımı',
-        ad: 'Fotoğraflar yıllara göre',
-        aciklama: 'Resimler klasöründeki fotoğrafların yıllara göre sayısı ve boyutu.',
-        sorgu: `SELECT YEAR(modified) AS yil, COUNT(*) AS adet, SUM(size) AS toplam FROM ${s(y.pictures)}\nWHERE ext IN ${FOTO}\nGROUP BY YEAR(modified) ORDER BY yil`,
+        ad: 'Müzik kütüphanesi',
+        aciklama: 'Ses dosyalarının türlere göre sayısı ve boyutu (@ses: mp3, flac, m4a, wav...).',
+        sorgu: `SELECT ext, COUNT(*) AS adet, SUM(size) AS toplam FROM ${s(y.home)}\nWHERE ext IN @ses\nGROUP BY ext ORDER BY toplam DESC`,
       },
       {
-        grup: 'Disk kullanımı',
-        ad: 'Videolar',
-        aciklama: 'Ev klasöründeki video dosyaları, büyükten küçüğe.',
-        sorgu: `SELECT name, size, modified, dir FROM ${s(y.home)}\nWHERE ext IN ${VIDEO}\nORDER BY size DESC`,
+        grup: 'Resim ve video',
+        ad: 'Tüm resimler',
+        aciklama: '@resim listesindeki bütün uzantılar (jpg, png, gif, heic, webp, RAW...), büyükten küçüğe.',
+        sorgu: `SELECT name, size, modified, dir FROM ${s(y.home)}\nWHERE ext IN @resim AND NOT hidden\nORDER BY size DESC LIMIT 200`,
+      },
+      {
+        grup: 'Resim ve video',
+        ad: 'Simgeler hariç resimler',
+        aciklama: 'Hazır listeden istemediğiniz uzantıları çıkarma örneği: .ico, .cur ve .svg hariç.',
+        sorgu: `SELECT name, size, modified, dir FROM ${s(y.home)}\nWHERE ext IN @resim AND ext NOT IN ('ico', 'cur', 'svg', 'svgz') AND NOT hidden\nORDER BY modified DESC`,
+      },
+      {
+        grup: 'Resim ve video',
+        ad: 'Resimler yıllara göre',
+        aciklama: 'Resimler klasöründeki resimlerin yıllara göre sayısı ve boyutu.',
+        sorgu: `SELECT YEAR(modified) AS yil, COUNT(*) AS adet, SUM(size) AS toplam FROM ${s(y.pictures)}\nWHERE ext IN @resim\nGROUP BY YEAR(modified) ORDER BY yil`,
+      },
+      {
+        grup: 'Resim ve video',
+        ad: 'Tüm videolar',
+        aciklama: '@video listesindeki bütün uzantılar (mp4, mkv, mov, avi, webm...), büyükten küçüğe.',
+        sorgu: `SELECT name, size, modified, dir FROM ${s(y.home)}\nWHERE ext IN @video\nORDER BY size DESC`,
+      },
+      {
+        grup: 'Resim ve video',
+        ad: 'Video türlerine göre yer',
+        aciklama: 'Hangi video biçimi ne kadar yer kaplıyor?',
+        sorgu: `SELECT ext, COUNT(*) AS adet, SUM(size) AS toplam FROM ${s(y.home)}\nWHERE ext IN @video\nGROUP BY ext ORDER BY toplam DESC`,
+      },
+      {
+        grup: 'Resim ve video',
+        ad: 'Son 30 günde gelen resim ve videolar',
+        aciklama: 'İki hazır liste birlikte: ext IN (@resim, @video).',
+        sorgu: `SELECT name, size, created, dir FROM ${s(y.home)}\nWHERE ext IN (@resim, @video) AND (created > NOW() - 30d OR modified > NOW() - 30d)\nORDER BY created DESC`,
       },
       {
         grup: 'Temizlik',
@@ -134,6 +161,12 @@
         ad: 'Kurulum dosyaları',
         aciklama: 'İndirilenler klasöründe kalmış kurulum ve arşiv dosyaları.',
         sorgu: `SELECT name, size, created, modified FROM ${s(y.downloads)}\nWHERE ext IN ${KURULUM[sistem] || KURULUM.linux}\nORDER BY size DESC`,
+      },
+      {
+        grup: 'Temizlik',
+        ad: 'Arşiv dosyaları',
+        aciklama: 'Zip, rar, 7z, iso gibi arşiv ve disk kalıpları (@arsiv), büyükten küçüğe.',
+        sorgu: `SELECT name, size, modified, dir FROM ${s(y.home)}\nWHERE ext IN @arsiv\nORDER BY size DESC`,
       },
       {
         grup: 'Temizlik',

@@ -131,7 +131,7 @@ func TestFlags(t *testing.T) {
 	if code, out, _ := fq(t, "", false, "--version"); code != 0 || !strings.HasPrefix(out, "fq ") {
 		t.Errorf("--version: %d %q", code, out)
 	}
-	if code, out, _ := fq(t, "", false, "--alanlar"); code != 0 || !strings.Contains(out, "modified") {
+	if code, out, _ := fq(t, "", false, "--alanlar"); code != 0 || !strings.Contains(out, "modified") || !strings.Contains(out, "@resim") || !strings.Contains(out, "gif") {
 		t.Errorf("--alanlar: %d", code)
 	}
 	if code, _, errOut := fq(t, "", false, "--format", "xml", "SELECT name FROM '.'"); code != 2 || !strings.Contains(errOut, "xml") {

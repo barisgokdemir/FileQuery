@@ -27,6 +27,7 @@ const (
 	TokSemicolon
 	TokKeyword
 	TokIllegal // a character the language does not use; reported by the parser with context
+	TokSetRef  // @name: a built-in extension set; Text holds the name without @
 )
 
 // Token is a single lexical unit with its byte offset in the source.
@@ -48,6 +49,8 @@ func (t Token) String() string {
 		return fmt.Sprintf("'%s'", t.Text)
 	case TokNumber:
 		return t.Text + t.Suffix
+	case TokSetRef:
+		return "@" + t.Text
 	default:
 		return fmt.Sprintf("%q", t.Text)
 	}

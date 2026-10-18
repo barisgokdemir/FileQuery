@@ -725,3 +725,65 @@ kbd {
   .kosul input[type="text"]:not(.kisa) { flex: 1 1 120px; width: auto; }
   .sekme-not { display: none; }
 }
+
+/* ---------- Hazır uzantı listeleri ---------- */
+
+.t-liste { color: var(--s-fonk); font-weight: 600; }
+
+.liste-ad { font-family: var(--kod); color: var(--s-fonk); font-weight: 600; }
+.liste-uzantilar {
+  font-family: var(--kod);
+  font-size: 12px;
+  color: var(--soluk);
+  opacity: 0.85;
+}
+
+.uzanti-etiketleri {
+  flex: 1 1 100%;
+  display: grid;
+  gap: 6px;
+  padding: 2px 0 2px;
+}
+.etiket-ozet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 13px;
+  color: var(--soluk);
+}
+.etiket-ozet .dugme-sade { padding: 2px 8px; font-size: 13px; }
+.etiket-kutusu { display: flex; flex-wrap: wrap; gap: 4px; }
+.uzanti-etiket {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px 1px 8px;
+  border: 1px solid var(--cizgi);
+  border-radius: 999px;
+  background: var(--yuzey);
+  color: var(--murekkep);
+  font: 12.5px/1.6 var(--kod);
+  cursor: pointer;
+}
+.uzanti-etiket span {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: var(--soluk);
+  font-family: var(--govde);
+  font-size: 13px;
+}
+.uzanti-etiket:hover { border-color: var(--hata); }
+.uzanti-etiket:hover span { background: var(--hata-zemin); color: var(--hata); }
+.uzanti-etiket.cikarildi {
+  border-style: dashed;
+  background: transparent;
+  color: var(--soluk);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+.uzanti-etiket.cikarildi:hover { border-color: var(--s-alan); opacity: 1; }
+.uzanti-etiket.cikarildi:hover span { background: transparent; color: var(--s-alan); }

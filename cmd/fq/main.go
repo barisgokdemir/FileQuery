@@ -51,6 +51,7 @@ Sorgu dili:
   [WHERE koşul] [GROUP BY ifade, ...] [ORDER BY ifade [ASC|DESC], ...] [LIMIT n]
 
   Operatörler: = != < <= > >=  AND OR NOT  LIKE  MATCHES  IN (...)  BETWEEN .. AND ..  IS [NOT] NULL
+  Hazır listeler: ext IN @resim | @video | @ses | @belge | @arsiv   (ör. ext IN @resim AND ext NOT IN ('ico'))
   Birimler:    500 KB, 2 MB, 1.5 GB   |   7d, 12h, 30m, 2w (NOW() - 7d)
   Tarihler:    '2024-03-15', '15.03.2024', '2024-03-15 14:30'
   Fonksiyonlar: NOW() TODAY() LOWER() UPPER() LEN() YEAR() MONTH() DAY()
@@ -251,4 +252,9 @@ func printFields(w io.Writer) {
 		fmt.Fprintf(w, "  %-9s %-10s %s\n", f.Name, f.Kind, f.Desc)
 	}
 	fmt.Fprintln(w, "\nSELECT * şu sütunları gösterir:", strings.Join(query.DefaultColumns, ", "))
+
+	fmt.Fprintln(w, "\nHazır uzantı listeleri (ext IN @resim, ext NOT IN ('ico') ile çıkarılabilir):")
+	for _, set := range query.ExtSets {
+		fmt.Fprintf(w, "  @%-7s %s (%d): %s\n", set.Name, set.Desc, len(set.Exts), strings.Join(set.Exts, ", "))
+	}
 }

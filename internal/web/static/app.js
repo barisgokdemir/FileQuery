@@ -136,16 +136,17 @@ function kacis(s) {
 
 // Sunucudaki lexer'ın sadeleştirilmiş bir kopyası; sadece renklendirme için.
 function renklendir(metin, hataKonumu) {
-  const desen = /(--[^\n]*)|('(?:[^']|'')*'?|"(?:[^"]|"")*"?)|(\d+(?:\.\d+)?(?:\s+[KkMmGgTt]?[Bb](?![\p{L}\p{N}_])|[\p{L}]*))|([\p{L}_][\p{L}\p{N}_]*)|(\s+)|([\s\S])/gu;
+  const desen = /(--[^\n]*)|('(?:[^']|'')*'?|"(?:[^"]|"")*"?)|(\d+(?:\.\d+)?(?:\s+[KkMmGgTt]?[Bb](?![\p{L}\p{N}_])|[\p{L}]*))|(@[\p{L}\p{N}_]*)|([\p{L}_][\p{L}\p{N}_]*)|(\s+)|([\s\S])/gu;
   let html = '';
   let m;
   while ((m = desen.exec(metin)) !== null) {
-    const [parca, yorum, metinSabit, sayiSabit, kelime] = m;
+    const [parca, yorum, metinSabit, sayiSabit, hazirListe, kelime] = m;
     const baslangic = m.index;
     let sinif = '';
     if (yorum) sinif = 't-yorum';
     else if (metinSabit) sinif = 't-metin';
     else if (sayiSabit) sinif = 't-sayi';
+    else if (hazirListe) sinif = 't-liste';
     else if (kelime) {
       const buyuk = kelime.toUpperCase();
       const sonraki = metin.slice(baslangic + kelime.length).trimStart()[0];
@@ -250,6 +251,20 @@ async function semaYukle() {
     return li;
   }));
 
+  $('#liste-listesi').replaceChildren(...(durum.sema.sets || []).map((k) => {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.innerHTML = '<span><span class="liste-ad"></span><span class="alan-tur"></span></span><span class="alan-aciklama"></span><span class="liste-uzantilar"></span>';
+    b.querySelector('.liste-ad').textContent = `@${k.name}`;
+    b.querySelector('.alan-tur').textContent = `${k.exts.length} uzantı`;
+    b.querySelector('.alan-aciklama').textContent = k.desc;
+    b.querySelector('.liste-uzantilar').textContent = k.exts.join(', ');
+    b.addEventListener('click', () => ekle(`@${k.name}`));
+    li.append(b);
+    return li;
+  }));
+
   ornekleriOlustur();
   if (!el.sorgu.value.trim()) sorguyuAyarla(ornekListesi()[0].sorgu);
   if (durum.sekme === 'olusturucu') olusturucuyuKur();
@@ -279,6 +294,7 @@ function olusturucuyuKur() {
     yerler,
     durum: oku(KAYIT.olusturucu, null),
     varsayilanKaynak: varsayilan,
+    kumeler: durum.sema?.sets || [],
     kaydet: (d) => yaz(KAYIT.olusturucu, d),
     sqlDegisti: (sql) => {
       durum.uretilenSorgu = sql;
