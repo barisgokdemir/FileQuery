@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -39,21 +38,37 @@ jobs:
         shell: bash
         run: go run ./cmd/fq "SELECT ext, COUNT(*), SUM(size) FROM '.' WHERE type = 'file' GROUP BY ext ORDER BY SUM(size) DESC LIMIT 5"
 
+  # VERSION dosyasındaki sürümün Release'i yoksa etiketi oluşturur ve binary'leri yükler.
+  # Yeni sürüm çıkarmak için VERSION dosyasındaki numarayı artırıp main'e göndermek yeterli.
   release:
     name: Release
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+      - name: Sürümü oku
+        id: surum
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "v$VERSION zaten yayınlanmış, atlanıyor."
+            echo "yayinla=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "yayinla=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-go@v5
+        if: steps.surum.outputs.yayinla == 'true'
         with:
           go-version-file: go.mod
       - name: Derle
+        if: steps.surum.outputs.yayinla == 'true'
+        env:
+          VERSION: ${{ steps.surum.outputs.version }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
           mkdir dist
           for target in windows/amd64 windows/arm64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
             GOOS="${target%/*}" GOARCH="${target#*/}"
@@ -69,8 +84,20 @@ jobs:
             fi
           done
           (cd dist && sha256sum * > SHA256SUMS.txt)
+      - name: Kendi binary'siyle duman testi
+        if: steps.surum.outputs.yayinla == 'true'
+        env:
+          VERSION: ${{ steps.surum.outputs.version }}
+        run: |
+          ./build/fq-${VERSION}-linux-amd64/fq --version
+          ./build/fq-${VERSION}-linux-amd64/fq "SELECT COUNT(*) FROM '.' WHERE ext = 'go'"
       - name: GitHub Release
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "FileQuery $GITHUB_REF_NAME" --generate-notes
+        if: steps.surum.outputs.yayinla == 'true'
+        env:
+          VERSION: ${{ steps.surum.outputs.version }}
+        run: |
+          gh release create "v$VERSION" dist/* --target "$GITHUB_SHA" \
+            --title "FileQuery v$VERSION" --generate-notes
 
   # İlk sürüm (2021, PHP) için etiket ve Release oluşturur. Bir kez çalışır, sonra atlanır.
   v1-arsiv:

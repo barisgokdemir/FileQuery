@@ -159,8 +159,9 @@ go test ./...          # birim ve entegrasyon testleri
 go run ./cmd/fq "SELECT * FROM '.' LIMIT 5"
 ```
 
-CI testleri Windows, Linux ve macOS'ta çalıştırır. `v*` etiketiyle Windows, Linux ve macOS için (amd64 ve arm64)
-derlenmiş dosyalar otomatik olarak Release'e eklenir.
+CI testleri Windows, Linux ve macOS'ta çalıştırır. Yeni sürüm çıkarmak için `VERSION` dosyasındaki numarayı
+artırıp `main`'e göndermek yeterli: CI etiketi oluşturur ve Windows, Linux, macOS (amd64 ve arm64) için derlenmiş
+dosyaları Release'e ekler.
 
 ## Geçmiş
 
