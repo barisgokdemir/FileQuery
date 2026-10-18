@@ -355,7 +355,9 @@ kbd {
 }
 .tablo td.yol { font-family: var(--kod); font-size: 13px; color: var(--soluk); }
 .tablo td.bos-hucre { color: var(--soluk); opacity: 0.5; }
-.tablo tbody tr:hover td { background: var(--yuzey-2); }
+.tablo tbody tr:not(.bosluk):hover td { background: var(--yuzey-2); }
+/* Sanal kaydırma: görünmeyen satırların yerini tutan boşluklar */
+.tablo tr.bosluk td { padding: 0; border: 0; max-width: none; }
 
 .tablo td.islem { width: 1%; padding: 2px 8px; text-align: right; }
 .goster {

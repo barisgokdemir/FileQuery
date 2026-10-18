@@ -23,6 +23,7 @@ const el = {
   uyari: $('#uyari'),
   disaAktar: $('#disa-aktar'),
   tablo: $('#tablo'),
+  tabloKap: $('#tablo-kap'),
   baslik: $('#baslik'),
   govde: $('#govde'),
   bos: $('#bos'),
@@ -49,6 +50,9 @@ const durum = {
   siralama: null, // { sutun, artan }
   iptal: null,
   sonSorgu: '',
+  ilerleme: { scanned: 0, rows: 0 }, // son ilerleme mesajı
+  sonuc: null, // 'tam' | 'kesik' | 'durduruldu'
+  sanal: { satirY: 0, bas: -1, son: -1, istek: 0, genislikler: [] },
   sekme: 'sql',
   olusturucu: null, // kurulduğunda { yenile }
   uretilenSorgu: null, // oluşturucunun editöre son yazdığı sorgu
@@ -508,7 +512,12 @@ async function calistir() {
   durum.sutunlar = [];
   durum.satirlar = [];
   durum.siralama = null;
+  durum.ilerleme = { scanned: 0, rows: 0 };
+  durum.sonuc = null;
+  durum.sanal.bas = durum.sanal.son = -1;
+  durum.sanal.genislikler = [];
   el.govde.replaceChildren();
+  el.tabloKap.scrollTop = 0;
   el.tablo.hidden = true;
   el.disaAktar.hidden = true;
   calisiyorMu(true);
@@ -546,7 +555,12 @@ async function calistir() {
     }
   } catch (hata) {
     if (hata.name === 'AbortError') {
-      durumYaz(`Durduruldu. <strong>${sayi.format(durum.satirlar.length)}</strong> sonuç gösteriliyor.`);
+      const bulunan = Math.max(durum.ilerleme.rows, durum.satirlar.length);
+      const taranan = Math.max(durum.ilerleme.scanned, bulunan);
+      let html = `Durduruldu: <strong>${sayi.format(bulunan)}</strong> sonuç, ${sayi.format(taranan)} öğe tarandı`;
+      if (bulunan > durum.satirlar.length) html += ` (${sayi.format(durum.satirlar.length)} tanesi gösteriliyor)`;
+      durumYaz(html + '.');
+      durum.sonuc = 'durduruldu';
       if (durum.satirlar.length) el.disaAktar.hidden = false;
     } else {
       hataGoster(null, hata.message);
@@ -568,10 +582,10 @@ function mesajIsle(m, sorgu) {
     el.tablo.hidden = false;
     el.bos.hidden = true;
   } else if (m.rows) {
-    const bas = durum.satirlar.length;
-    durum.satirlar.push(...m.rows);
-    satirlariEkle(bas);
+    for (const r of m.rows) durum.satirlar.push(r);
+    cizimIste();
   } else if (m.progress) {
+    durum.ilerleme = m.progress;
     durumYaz(`Taranıyor: <strong>${sayi.format(m.progress.scanned)}</strong> öğe, <strong>${sayi.format(m.progress.rows)}</strong> sonuç`);
   } else if (m.error) {
     hataGoster(sorgu, m.error.message, m.error.pos);
@@ -587,18 +601,24 @@ function mesajIsle(m, sorgu) {
 
 function sonucuYaz(d) {
   const sn = (d.elapsedMs / 1000).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  let html = d.rows === 0 ? 'Sonuç yok. ' : `<strong>${sayi.format(d.rows)}</strong> sonuç, `;
+  const toplam = d.total ?? d.rows;
+  let html = toplam === 0 ? 'Sonuç yok. ' : `<strong>${sayi.format(toplam)}</strong> sonuç, `;
   html += `${sayi.format(d.scanned)} öğe tarandı, ${sn} sn`;
   if (d.denied > 0) {
     const liste = (d.deniedPaths || []).join('\n');
     html += `; <span class="erisilemeyen" title="${kacis(liste)}">erişim izni olmayan ${sayi.format(d.denied)} klasör atlandı</span>`;
   }
   durumYaz(html);
+  durum.sonuc = d.truncated ? 'kesik' : 'tam';
   el.disaAktar.hidden = d.rows === 0;
   if (d.truncated) {
-    el.uyari.textContent = `İlk ${sayi.format(d.maxRows)} sonuç gösteriliyor. Tamamını almak için dışa aktarın ya da sorguyu daraltın (WHERE, LIMIT).`;
+    el.uyari.textContent = `${sayi.format(toplam)} sonuçtan ${sayi.format(d.rows)} tanesi gösteriliyor. Tamamı için dışa aktarın `
+      + '(sorgu bunun için yeniden çalışır) ya da sorguyu daraltın (WHERE, LIMIT).';
     el.uyari.hidden = false;
   }
+  // Sorgu bitince tablo bir sonraki kareyi beklemeden güncel olsun.
+  cancelAnimationFrame(durum.sanal.istek);
+  ciz();
   if (d.rows === 0) {
     el.tablo.hidden = true;
   }
@@ -633,7 +653,18 @@ function basligiOlustur() {
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = c.name;
-    b.addEventListener('click', () => sirala(i));
+    b.addEventListener('click', () => {
+      if (durum.satirlar.length < 50_000) return sirala(i);
+      // Büyük listede sıralama bir iki saniye sürebilir; önce bilgiyi çiz.
+      const onceki = el.durum.innerHTML;
+      durumYaz('Sıralanıyor…');
+      document.body.style.cursor = 'progress';
+      setTimeout(() => {
+        sirala(i);
+        durumYaz(onceki);
+        document.body.style.cursor = '';
+      }, 30);
+    });
     th.append(b);
     return th;
   });
@@ -679,33 +710,108 @@ function satirOlustur(satir, s, yolVar) {
   return tr;
 }
 
-function satirlariEkle(bas) {
+// Sanal kaydırma: yüz binlerce satırda da yalnızca ekranda görünen satırlar (ve birkaç
+// yedek) DOM'a eklenir; üstte ve altta boşluk satırları kaydırma çubuğunun boyunu korur.
+// Tarayıcılar çok yüksek öğeleri çizemediği için toplam yükseklik MAKS_YUKSEKLIK ile
+// sınırlanır; daha uzun listelerde kaydırma konumu orantılı olarak satıra çevrilir.
+const MAKS_YUKSEKLIK = 8_000_000;
+const YEDEK = 8;
+
+function cizimIste(zorla = false) {
+  if (zorla) durum.sanal.bas = -1;
+  if (!durum.sanal.istek) durum.sanal.istek = requestAnimationFrame(ciz);
+}
+
+function boslukSatiri(yukseklik, sutunSayisi) {
+  const tr = document.createElement('tr');
+  tr.className = 'bosluk';
+  tr.setAttribute('aria-hidden', 'true');
+  const td = document.createElement('td');
+  td.colSpan = sutunSayisi;
+  td.style.height = `${yukseklik}px`;
+  tr.append(td);
+  return tr;
+}
+
+function ciz() {
+  const v = durum.sanal;
+  v.istek = 0;
+  const n = durum.satirlar.length;
+  if (!n || el.tablo.hidden) {
+    el.govde.replaceChildren();
+    v.bas = v.son = -1;
+    return;
+  }
+  const h = v.satirY || 33;
+  const gorunur = Math.max(el.tabloKap.clientHeight - el.baslik.offsetHeight, h);
+  const gercek = n * h;
+  const toplam = Math.min(gercek, MAKS_YUKSEKLIK);
+  const oran = toplam > gorunur ? (gercek - gorunur) / (toplam - gorunur) : 1;
+  const k = Math.min(el.tabloKap.scrollTop, Math.max(0, toplam - gorunur));
+  const gercekKonum = k * oran;
+  const ilk = Math.min(n - 1, Math.floor(gercekKonum / h));
+  const olcekli = oran > 1.0001;
+  const bas = olcekli ? ilk : Math.max(0, ilk - YEDEK);
+  const son = Math.min(n, ilk + Math.ceil(gorunur / h) + 1 + YEDEK);
+  const ust = olcekli ? Math.max(0, k - (gercekKonum - ilk * h)) : bas * h;
+  const alt = Math.max(0, toplam - ust - (son - bas) * h);
+  const sutunSayisi = el.baslik.children.length || 1;
+
+  if (bas === v.bas && son === v.son && el.govde.firstChild) {
+    // Yalnızca liste uzadı: görünen satırlar aynı, boşlukları güncelle.
+    el.govde.firstChild.firstChild.style.height = `${ust}px`;
+    el.govde.lastChild.firstChild.style.height = `${alt}px`;
+    return;
+  }
+  v.bas = bas;
+  v.son = son;
+
   const s = yolSutunlari();
   const yolVar = s.yol >= 0 || (s.klasor >= 0 && s.ad >= 0);
   const parca = document.createDocumentFragment();
-  for (let i = bas; i < durum.satirlar.length; i++) {
-    parca.append(satirOlustur(durum.satirlar[i], s, yolVar));
+  parca.append(boslukSatiri(ust, sutunSayisi));
+  for (let i = bas; i < son; i++) parca.append(satirOlustur(durum.satirlar[i], s, yolVar));
+  parca.append(boslukSatiri(alt, sutunSayisi));
+  el.govde.replaceChildren(parca);
+
+  // Satır yüksekliğini gerçek çizimden öğren (yakınlaştırma, yazı tipi farkları).
+  const olculen = el.govde.children[1]?.getBoundingClientRect().height;
+  if (olculen && Math.abs(olculen - h) > 0.5) {
+    v.satirY = olculen;
+    cizimIste(true);
   }
-  el.govde.append(parca);
+  // Sütunlar yalnızca genişleyebilir; kaydırırken tablonun zıplamasını önler.
+  [...el.baslik.children].forEach((th, i) => {
+    const g = th.getBoundingClientRect().width;
+    if (g > (v.genislikler[i] || 0)) {
+      v.genislikler[i] = g;
+      th.style.minWidth = `${Math.ceil(g)}px`;
+    }
+  });
 }
 
 function sirala(sutun) {
   const artan = durum.siralama?.sutun === sutun ? !durum.siralama.artan : true;
   durum.siralama = { sutun, artan };
-  durum.satirlar.sort((a, b) => {
-    const x = siralamaDegeri(a[sutun]);
-    const y = siralamaDegeri(b[sutun]);
+  const satirlar = durum.satirlar;
+  // Anahtarlar bir kez hesaplanır; karşılaştırma başına tarih ayrıştırmak büyük listede yavaş.
+  const anahtar = satirlar.map((r) => siralamaDegeri(r[sutun]));
+  const sira = Array.from(satirlar.keys());
+  sira.sort((a, b) => {
+    const x = anahtar[a];
+    const y = anahtar[b];
     if (x === null && y === null) return 0;
     if (x === null) return 1; // boşlar her zaman sonda
     if (y === null) return -1;
     const c = typeof x === 'string' || typeof y === 'string' ? karsilastir(String(x), String(y)) : x - y;
     return artan ? c : -c;
   });
+  durum.satirlar = sira.map((i) => satirlar[i]);
   [...el.baslik.children].forEach((th, i) => {
     if (i < durum.sutunlar.length) th.setAttribute('aria-sort', i === sutun ? (artan ? 'ascending' : 'descending') : 'none');
   });
-  el.govde.replaceChildren();
-  satirlariEkle(0);
+  el.tabloKap.scrollTop = 0;
+  cizimIste(true);
 }
 
 async function klasordeGoster(yol) {
@@ -723,14 +829,113 @@ async function klasordeGoster(yol) {
   }
 }
 
+// ---------- Dışa aktarma ----------
+// Sonuçların tamamı tarayıcıdaysa dosya buradan, tablodaki sıralamayla anında üretilir.
+// Biçimler sunucunun (fq --format) çıktısıyla aynıdır. Yalnızca sonuç satır sınırını
+// aştıysa tamamı için sorgu sunucuda yeniden çalıştırılır.
+
+// Go'nun strconv.FormatFloat(f, 'f', -1, 64) çıktısı: en kısa gösterim, üssüz.
+function sayiMetni(x) {
+  const m = String(x);
+  const u = /^(-?)(\d)(?:\.(\d+))?e([+-]\d+)$/.exec(m);
+  if (!u) return m;
+  const rakamlar = u[2] + (u[3] || '');
+  const nokta = 1 + Number(u[4]);
+  if (nokta <= 0) return `${u[1]}0.${'0'.repeat(-nokta)}${rakamlar}`;
+  if (nokta >= rakamlar.length) return u[1] + rakamlar + '0'.repeat(nokta - rakamlar.length);
+  return `${u[1]}${rakamlar.slice(0, nokta)}.${rakamlar.slice(nokta)}`;
+}
+
+const iki = (n) => String(n).padStart(2, '0');
+
+function hamDeger(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'boolean') return String(v);
+  if (typeof v === 'number') return sayiMetni(v);
+  if (typeof v === 'object' && 't' in v) return v.t;
+  if (typeof v === 'object' && 'd' in v) return sayiMetni(v.d);
+  return String(v);
+}
+
+function excelDegeri(v) {
+  if (typeof v === 'boolean') return v ? 'evet' : 'hayır';
+  if (typeof v === 'number' && !Number.isInteger(v)) return sayiMetni(v).replace('.', ',');
+  if (v && typeof v === 'object' && 't' in v) {
+    const t = new Date(v.t);
+    return `${iki(t.getDate())}.${iki(t.getMonth() + 1)}.${t.getFullYear()} ${iki(t.getHours())}:${iki(t.getMinutes())}:${iki(t.getSeconds())}`;
+  }
+  return hamDeger(v);
+}
+
+// Go encoding/csv kurallarıyla tek alan.
+function csvAlani(f, ayrac, crlf) {
+  if (f === '') return f;
+  if (!(f === '\\.' || f.includes(ayrac) || f.includes('"') || /[\r\n]/.test(f) || /^\s/u.test(f))) return f;
+  let q = f.replace(/"/g, '""');
+  if (crlf) q = q.replace(/\r/g, '').replace(/\n/g, '\r\n');
+  return `"${q}"`;
+}
+
+function dosyaUret(bicim) {
+  const adlar = durum.sutunlar.map((c) => c.name);
+  const parcalar = [];
+  if (bicim === 'json') {
+    const anahtarlar = adlar.map((a) => JSON.stringify(a));
+    parcalar.push('[');
+    durum.satirlar.forEach((r, j) => {
+      const alanlar = r.map((v, i) => {
+        let d = v ?? null;
+        if (d && typeof d === 'object') d = 't' in d ? d.t : d.d;
+        return `${anahtarlar[i]}: ${JSON.stringify(d)}`;
+      });
+      parcalar.push(`${j ? ',' : ''}\n  {${alanlar.join(', ')}}`);
+    });
+    parcalar.push(durum.satirlar.length ? '\n]\n' : ']\n');
+    return { parcalar, tur: 'application/json;charset=utf-8', uzanti: 'json' };
+  }
+  const excel = bicim === 'excel';
+  const ayrac = excel ? ';' : ',';
+  const son = excel ? '\r\n' : '\n';
+  const deger = excel ? excelDegeri : hamDeger;
+  const satir = (alanlar) => alanlar.map((f) => csvAlani(f, ayrac, excel)).join(ayrac) + son;
+  if (excel) parcalar.push('﻿');
+  parcalar.push(satir(adlar));
+  for (const r of durum.satirlar) parcalar.push(satir(r.map(deger)));
+  return { parcalar, tur: 'text/csv;charset=utf-8', uzanti: 'csv' };
+}
+
+function dosyaAdi(uzanti) {
+  const t = new Date();
+  return `filequery-${t.getFullYear()}${iki(t.getMonth() + 1)}${iki(t.getDate())}-${iki(t.getHours())}${iki(t.getMinutes())}.${uzanti}`;
+}
+
+function disaAktar(bicim) {
+  const { parcalar, tur, uzanti } = dosyaUret(bicim);
+  const url = URL.createObjectURL(new Blob(parcalar, { type: tur }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = dosyaAdi(uzanti);
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 function disaAktarBaglantilari() {
   $$('[data-bicim]').forEach((a) => {
     a.addEventListener('click', (e) => {
-      if (!durum.sonSorgu) {
+      if (!durum.sonSorgu || durum.iptal) {
         e.preventDefault();
         return;
       }
-      a.href = `/api/export?format=${a.dataset.bicim}&q=${encodeURIComponent(durum.sonSorgu)}`;
+      if (durum.sonuc === 'kesik') {
+        // Tamamı tarayıcıda yok: sunucu sorguyu yeniden çalıştırıp dosyayı akıtır.
+        a.href = `/api/export?format=${a.dataset.bicim}&q=${encodeURIComponent(durum.sonSorgu)}`;
+        bildir('Tüm sonuçlar için sorgu yeniden çalıştırılıyor; dosya hazır olunca inecek.');
+        return;
+      }
+      e.preventDefault();
+      disaAktar(a.dataset.bicim);
     });
   });
 }
@@ -785,6 +990,9 @@ function baslat() {
   new ResizeObserver(() => {
     el.vurgu.parentElement.style.height = `${el.sorgu.offsetHeight}px`;
   }).observe(el.sorgu);
+
+  el.tabloKap.addEventListener('scroll', () => cizimIste(), { passive: true });
+  new ResizeObserver(() => cizimIste()).observe(el.tabloKap);
 
   el.calistir.addEventListener('click', calistir);
   el.durdur.addEventListener('click', durdur);

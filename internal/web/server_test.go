@@ -219,8 +219,22 @@ func TestRowCap(t *testing.T) {
 			json.Unmarshal(raw, &done)
 		}
 	}
-	if total != 2 || done["truncated"] != true {
+	if total != 2 || done["truncated"] != true || done["rows"] != float64(2) {
 		t.Errorf("sınır: %d satır, done=%v", total, done)
+	}
+	// The scan goes on past the cap and reports the real total.
+	all := readStream(t, do(t, s, "POST", ts.URL+"/api/query",
+		`{"query":"SELECT COUNT(*) FROM '`+jsonPath(root)+`'"}`, true))
+	var want float64
+	for _, m := range all {
+		if raw, ok := m["rows"]; ok {
+			var r [][]float64
+			json.Unmarshal(raw, &r)
+			want = r[0][0]
+		}
+	}
+	if want <= 2 || done["total"] != want {
+		t.Errorf("toplam: %v, beklenen %v", done["total"], want)
 	}
 }
 

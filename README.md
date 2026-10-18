@@ -31,8 +31,10 @@ Komut satırından `fq --web` ile de başlatılabilir. Arayüzü kapatmak için 
   (OneDrive'a taşınmış Masaüstü, Türkçe adlı Linux klasörleri dahil). Başka bir sistemin örnekleri de seçilebilir
 - Renklendirmeli sorgu editörü, **Ctrl+Enter** ile çalıştırma
 - Sonuçlar bulundukça tabloya akar; canlı "taranan / bulunan" sayacı ve **Durdur** (Esc) düğmesi
+- Yüz binlerce satırlık sonuçlar da akıcı kayar (yalnızca ekranda görünen satırlar çizilir)
 - Sütun başlığına tıklayarak sıralama, satırdaki **Klasörde göster** ile dosyayı Gezgin'de seçili açma
-- **Excel** (Türkçe Excel'in doğrudan açtığı `;` ayraçlı UTF-8 CSV), CSV ve JSON olarak dışa aktarma
+- **Excel** (Türkçe Excel'in doğrudan açtığı `;` ayraçlı UTF-8 CSV), CSV ve JSON olarak dışa aktarma; dosya
+  tablodaki sonuçlardan ve sıralamayla anında üretilir, arama tekrarlanmaz
 - Hatalı sorguda hatanın yeri editörde işaretlenir; alanlar paneli, sorgu geçmişi, açık ve koyu tema
 
 Güvenlik: Arayüz yalnızca bu bilgisayardan (`127.0.0.1`) erişilebilir. Her açılışta rastgele bir oturum anahtarı
@@ -199,8 +201,10 @@ SELECT nmae FROM 'C:\Users' WHERE ext = 'pdf'
   Erişim izni olmayan klasörler atlanır ve sonunda raporlanır (`-v` ile liste).
 - **Akış:** `ORDER BY` veya `GROUP BY` yoksa CSV/JSON sonuçları bulundukça yazılır; `LIMIT` dolduğunda tarama durur.
 - **Arayüz:** Go'nun `embed` paketiyle binary'ye gömülü, çerçevesiz HTML/CSS/JS. Sonuçlar satır satır JSON (NDJSON)
-  olarak akar; tarayıcı bağlantıyı kapatınca (Durdur) tarama da durur. Tarayıcıya gönderilen satır sayısı 10.000 ile
-  sınırlıdır, tamamı dışa aktarılabilir.
+  olarak akar; tarayıcı bağlantıyı kapatınca (Durdur) tarama da durur. Tablo sanal kaydırma kullanır. Tarayıcının
+  belleğini korumak için en fazla 1.000.000 satır gönderilir; tarama yine sonuna kadar sürer ve gerçek toplamı
+  bildirir. Bu sınırı aşan sonuçlarda dışa aktarma sorguyu sunucuda yeniden çalıştırıp dosyayı akıtır, diğer
+  durumlarda dosya tarayıcıda üretilir.
 - **Bağımlılık yok:** Sadece Go standart kütüphanesi. Windows'a özgü bilgiler (öznitelikler, sahip, hardlink)
   `syscall` ile okunur.
 
@@ -224,6 +228,9 @@ artırıp `main`'e göndermek yeterli: CI etiketi oluşturur ve Windows, Linux, 
 dosyaları Release'e ekler.
 
 ## Geçmiş
+
+**v2.1.4 (2026):** Arayüzde 10.000 satır sınırı kalktı: sanal kaydırma, 1.000.000 satıra kadar gösterim ve sınır
+aşıldığında gerçek toplam; Durdur'da bulunan ve taranan sayısı; dışa aktarma aramayı tekrarlamadan anında.
 
 **v2.1.3 (2026):** Hazır uzantı listeleri (`@resim`, `@video`, `@ses`, `@belge`, `@arsiv`); oluşturucuda etiketle
 uzantı çıkarma; resim, video, ses ve arşiv örnekleri (toplam 25 örnek).
