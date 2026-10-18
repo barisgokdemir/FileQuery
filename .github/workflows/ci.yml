@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        if: runner.os == 'Linux'
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - name: go test
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            go test ./...
+          else
+            go test -race ./...
+          fi
+      - name: Gerçek klasörde örnek sorgu
+        shell: bash
+        run: go run ./cmd/fq "SELECT ext, COUNT(*), SUM(size) FROM '.' WHERE type = 'file' GROUP BY ext ORDER BY SUM(size) DESC LIMIT 5"
+
+  release:
+    name: Release
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Derle
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir dist
+          for target in windows/amd64 windows/arm64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS="${target%/*}" GOARCH="${target#*/}"
+            name="fq-${VERSION}-${GOOS}-${GOARCH}"
+            ext=""; [ "$GOOS" = "windows" ] && ext=".exe"
+            CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -trimpath \
+              -ldflags "-s -w -X main.version=${VERSION}" -o "build/${name}/fq${ext}" ./cmd/fq
+            cp README.md LICENSE "build/${name}/"
+            if [ "$GOOS" = "windows" ]; then
+              (cd build && zip -qr "../dist/${name}.zip" "${name}")
+            else
+              tar -czf "dist/${name}.tar.gz" -C build "${name}"
+            fi
+          done
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+      - name: GitHub Release
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "FileQuery $GITHUB_REF_NAME" --generate-notes
+
+  # İlk sürüm (2021, PHP) için etiket ve Release oluşturur. Bir kez çalışır, sonra atlanır.
+  v1-arsiv:
+    name: v1 arşivi
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ETIKET: v1.0
+      V1_COMMIT: 918a0866b33d38acb68627891d77c9f1d8544183
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release yoksa oluştur
+        run: |
+          if gh release view "$ETIKET" >/dev/null 2>&1; then
+            echo "$ETIKET zaten var, atlanıyor."
+            exit 0
+          fi
+          cat > notlar.md <<'EOF'
+          FileQuery'nin 2021'de PHP ile yazılan ilk sürümü, o günkü haliyle.
+
+          **Uyarı:** Bu sürüm form girdisiyle sunucuda dosya oluşturup silebildiği için bir web sunucusunda
+          yayınlanmamalıdır. Yalnızca arşiv amaçlı tutulmaktadır; güncel sürüm için deponun ana sayfasına bakın.
+          EOF
+          gh release create "$ETIKET" --target "$V1_COMMIT" --title "v1.0 - PHP sürümü (2021)" --notes-file notlar.md
