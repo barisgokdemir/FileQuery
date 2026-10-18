@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/ornekler.js" defer></script>
   <script src="/static/olusturucu.js" defer></script>
+  <script src="/static/suzgec.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
@@ -61,6 +62,10 @@
     <section class="sonuclar" aria-label="Sonuçlar">
       <div class="sonuc-cubugu">
         <p class="durum" id="durum" aria-live="polite"></p>
+        <p class="suzgec-durum" id="suzgec-durum" hidden>
+          Süzgeç: <strong class="sayi"></strong> satır
+          <button type="button" class="dugme-kucuk">Süzgeçleri temizle</button>
+        </p>
         <div class="disa-aktar" id="disa-aktar" hidden>
           <span>Dışa aktar:</span>
           <a class="dugme-kucuk" data-bicim="excel" download>Excel</a>

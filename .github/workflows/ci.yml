@@ -25,6 +25,9 @@ jobs:
       - name: gofmt
         if: runner.os == 'Linux'
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: Arayüz süzgeç testleri
+        if: runner.os == 'Linux'
+        run: node internal/web/jstest/suzgec_test.js
       - run: go vet ./...
       - name: go test
         shell: bash
