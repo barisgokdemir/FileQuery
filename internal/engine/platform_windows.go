@@ -45,6 +45,12 @@ func hasAttr(info fs.FileInfo, attr uint32) bool {
 	return d != nil && d.FileAttributes&attr != 0
 }
 
+// isDirectoryReparsePoint reports whether an irregular entry is a directory
+// reparse point (junction or mount point) rather than a cloud placeholder file.
+func isDirectoryReparsePoint(info fs.FileInfo) bool {
+	return info != nil && hasAttr(info, syscall.FILE_ATTRIBUTE_DIRECTORY)
+}
+
 func isHidden(_ string, info fs.FileInfo) bool { return hasAttr(info, syscall.FILE_ATTRIBUTE_HIDDEN) }
 func isReadOnly(info fs.FileInfo) bool         { return hasAttr(info, syscall.FILE_ATTRIBUTE_READONLY) }
 func isSystem(info fs.FileInfo) bool           { return hasAttr(info, syscall.FILE_ATTRIBUTE_SYSTEM) }
