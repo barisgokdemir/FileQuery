@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -124,9 +125,14 @@ func TestSchema(t *testing.T) {
 		Version   string      `json:"version"`
 		Fields    []fieldJSON `json:"fields"`
 		Functions []string    `json:"functions"`
+		OS        string      `json:"os"`
+		Places    []Place     `json:"places"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&sch); err != nil {
 		t.Fatal(err)
+	}
+	if sch.OS != runtime.GOOS || len(sch.Places) == 0 || sch.Places[0].Key != "home" {
+		t.Errorf("sistem bilgisi: os=%q yerler=%+v", sch.OS, sch.Places)
 	}
 	if sch.Version != "test" || len(sch.Fields) < 10 || len(sch.Functions) < 5 {
 		t.Errorf("şema: %+v", sch)
@@ -254,5 +260,30 @@ func TestStaticFilesAreEmbedded(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("%s: %d", f, resp.StatusCode)
 		}
+	}
+}
+
+func TestCheck(t *testing.T) {
+	s, ts, root := testServer(t)
+	check := func(q string) map[string]any {
+		body, _ := json.Marshal(map[string]string{"query": q})
+		resp := do(t, s, "POST", ts.URL+"/api/check", string(body), true)
+		var out map[string]any
+		json.NewDecoder(resp.Body).Decode(&out)
+		return out
+	}
+	if out := check("SELECT name, size FROM '" + root + "' WHERE size > 1 MB"); out["ok"] != true {
+		t.Errorf("geçerli sorgu: %v", out)
+	}
+	out := check("SELECT nmae FROM '" + root + "'")
+	if e, _ := out["error"].(map[string]any); e == nil || e["pos"] != float64(7) {
+		t.Errorf("hata konumu: %v", out)
+	}
+	out = check("SELECT name FROM '" + filepath.Join(root, "yok") + "'")
+	if e, _ := out["error"].(map[string]any); e == nil || !strings.Contains(e["message"].(string), "bulunamadı") {
+		t.Errorf("olmayan klasör: %v", out)
+	}
+	if resp := do(t, s, "POST", ts.URL+"/api/check", `{"query":"x"}`, false); resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("oturumsuz: %d", resp.StatusCode)
 	}
 }

@@ -11,6 +11,11 @@ const el = {
   calistir: $('#calistir'),
   durdur: $('#durdur'),
   ornekler: $('#ornekler'),
+  olusturucu: $('#olusturucu'),
+  onizlemeBaslik: $('#onizleme-baslik'),
+  sekmeNot: $('#sekme-not'),
+  ornekListesi: $('#ornek-listesi'),
+  sistemNotu: $('#sistem-notu'),
   hata: $('#hata'),
   hataKod: $('#hata-kod'),
   hataMesaj: $('#hata-mesaj'),
@@ -30,7 +35,10 @@ const el = {
   bildirim: $('#bildirim'),
 };
 
-const KAYIT = { sorgu: 'fq.sorgu', gecmis: 'fq.gecmis', tema: 'fq.tema' };
+const KAYIT = {
+  sorgu: 'fq.sorgu', gecmis: 'fq.gecmis', tema: 'fq.tema',
+  sistem: 'fq.sistem', sekme: 'fq.sekme', olusturucu: 'fq.olusturucu',
+};
 
 const durum = {
   sema: null,
@@ -41,6 +49,9 @@ const durum = {
   siralama: null, // { sutun, artan }
   iptal: null,
   sonSorgu: '',
+  sekme: 'sql',
+  olusturucu: null, // kurulduğunda { yenile }
+  uretilenSorgu: null, // oluşturucunun editöre son yazdığı sorgu
 };
 
 // ---------- Yardımcılar ----------
@@ -174,13 +185,34 @@ function vurguyuGuncelle() {
 
 // ---------- Şema, örnekler, alanlar ----------
 
-const ORNEKLER = [
-  ['Büyük dosyalar', "SELECT name, size, modified, dir FROM '~'\nWHERE type = 'file' AND size > 500 MB\nORDER BY size DESC LIMIT 50"],
-  ['Son 7 gün', "SELECT name, modified, dir FROM '~'\nWHERE type = 'file' AND modified > NOW() - 7d AND NOT hidden\nORDER BY modified DESC LIMIT 200"],
-  ['Türlere göre yer', "SELECT ext, COUNT(*) AS adet, SUM(size) AS toplam FROM '~'\nWHERE type = 'file'\nGROUP BY ext ORDER BY toplam DESC LIMIT 20"],
-  ['PDF ara', "SELECT name, size, modified, dir FROM '~'\nWHERE ext = 'pdf' AND name LIKE '%fatura%'"],
-  ['Fotoğraflar (yıllara göre)', "SELECT YEAR(modified) AS yil, COUNT(*) AS adet, SUM(size) AS toplam FROM '~'\nWHERE ext IN ('jpg', 'jpeg', 'png', 'heic')\nGROUP BY YEAR(modified) ORDER BY yil"],
-];
+// ---------- İşletim sistemi ve örnekler ----------
+
+const SISTEM_ADLARI = { windows: 'Windows', linux: 'Linux', darwin: 'macOS' };
+
+// Sunucu kullanıcının bilgisayarında çalıştığı için işletim sistemini o bildirir.
+// Bildirmezse (eski sürüm) tarayıcının kimliğinden tahmin edilir.
+function algilananSistem() {
+  if (durum.sema?.os && durum.sema.os in SISTEM_ADLARI) return durum.sema.os;
+  const ua = `${navigator.userAgentData?.platform || ''} ${navigator.userAgent}`;
+  if (/win/i.test(ua)) return 'windows';
+  if (/mac/i.test(ua)) return 'darwin';
+  return 'linux';
+}
+
+function seciliSistem() {
+  const s = oku(KAYIT.sistem, null);
+  return s in SISTEM_ADLARI ? s : algilananSistem();
+}
+
+function ornekListesi() {
+  return window.FQOrnekler.uret(seciliSistem(), algilananSistem(), durum.sema?.places || []);
+}
+
+function ornegiYukle(sorgu) {
+  sekmeAc('sql');
+  sorguyuAyarla(sorgu);
+  el.sorgu.focus();
+}
 
 async function semaYukle() {
   try {
@@ -218,22 +250,125 @@ async function semaYukle() {
     return li;
   }));
 
+  ornekleriOlustur();
+  if (!el.sorgu.value.trim()) sorguyuAyarla(ornekListesi()[0].sorgu);
+  if (durum.sekme === 'olusturucu') olusturucuyuKur();
   vurguyuGuncelle();
 }
 
+// ---------- Sekmeler ve sorgu oluşturucu ----------
+
+function sekmeAc(ad) {
+  durum.sekme = ad;
+  yaz(KAYIT.sekme, ad);
+  $$('[data-sekme]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.sekme === ad)));
+  const olusturucu = ad === 'olusturucu';
+  el.olusturucu.hidden = !olusturucu;
+  el.onizlemeBaslik.hidden = !olusturucu;
+  el.sekmeNot.textContent = '';
+  if (olusturucu) {
+    if (!durum.olusturucu && durum.sema) olusturucuyuKur();
+    else durum.olusturucu?.yenile();
+  }
+}
+
+function olusturucuyuKur() {
+  const yerler = durum.sema?.places || [];
+  const varsayilan = (yerler.find((y) => y.key === 'downloads') || yerler[0] || { path: '~' }).path;
+  durum.olusturucu = window.FQOlusturucu.kur(el.olusturucu, {
+    yerler,
+    durum: oku(KAYIT.olusturucu, null),
+    varsayilanKaynak: varsayilan,
+    kaydet: (d) => yaz(KAYIT.olusturucu, d),
+    sqlDegisti: (sql) => {
+      durum.uretilenSorgu = sql;
+      el.sekmeNot.textContent = '';
+      sorguyuAyarla(sql);
+    },
+    dogrula: sorguyuDenetle,
+  });
+}
+
+// Sorguyu çalıştırmadan denetler (söz dizimi ve klasörlerin varlığı).
+async function sorguyuDenetle(sorgu) {
+  try {
+    const yanit = await fetch('/api/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: sorgu }),
+    });
+    const sonuc = await yanit.json();
+    if (sonuc.ok) return { ok: true };
+    return { ok: false, mesaj: sonuc.error?.message || sonuc.hata || 'Sorgu denetlenemedi' };
+  } catch (hata) {
+    return { ok: false, mesaj: `Sunucuya ulaşılamadı: ${hata.message}` };
+  }
+}
+
 function ornekleriOlustur() {
-  el.ornekler.replaceChildren(...ORNEKLER.map(([ad, sorgu]) => {
+  const liste = ornekListesi();
+  const hizli = liste.slice(0, 4).map((o) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'ornek';
-    b.textContent = ad;
-    b.title = sorgu.replace(/\n/g, ' ');
-    b.addEventListener('click', () => {
-      sorguyuAyarla(sorgu);
-      el.sorgu.focus();
-    });
+    b.textContent = o.ad;
+    b.title = `${o.aciklama}\n\n${o.sorgu}`;
+    b.addEventListener('click', () => ornegiYukle(o.sorgu));
     return b;
-  }));
+  });
+  const tumu = document.createElement('button');
+  tumu.type = 'button';
+  tumu.className = 'ornek ornek-tumu';
+  tumu.textContent = `Tüm örnekler (${liste.length})`;
+  tumu.addEventListener('click', () => cekmeceAc('ornekler'));
+  el.ornekler.replaceChildren(...hizli, tumu);
+  if (!el.cekmece.hidden && el.cekmece.dataset.panel === 'ornekler') ornekPaneliCiz();
+}
+
+function ornekPaneliCiz() {
+  const secili = seciliSistem();
+  const algilanan = algilananSistem();
+  $$('[data-sistem]').forEach((b) => {
+    b.setAttribute('aria-checked', String(b.dataset.sistem === secili));
+    b.textContent = SISTEM_ADLARI[b.dataset.sistem] + (b.dataset.sistem === algilanan ? ' ✓' : '');
+    b.title = b.dataset.sistem === algilanan ? 'Bu bilgisayar' : '';
+  });
+  el.sistemNotu.textContent = secili === algilanan
+    ? `Bu bilgisayar ${SISTEM_ADLARI[algilanan]} olarak algılandı; örnekler kendi klasör yollarınızı kullanıyor.`
+    : `Bu bilgisayar ${SISTEM_ADLARI[algilanan]}. ${SISTEM_ADLARI[secili]} örnekleri genel klasör yollarıyla gösteriliyor.`;
+
+  const gruplar = new Map();
+  for (const o of ornekListesi()) {
+    if (!gruplar.has(o.grup)) gruplar.set(o.grup, []);
+    gruplar.get(o.grup).push(o);
+  }
+  const parcalar = [];
+  for (const [grup, ornekler] of gruplar) {
+    const baslik = document.createElement('h3');
+    baslik.textContent = grup;
+    const ul = document.createElement('ul');
+    ul.className = 'ornek-listesi';
+    for (const o of ornekler) {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      const ad = document.createElement('strong');
+      ad.textContent = o.ad;
+      const aciklama = document.createElement('span');
+      aciklama.textContent = o.aciklama;
+      const kod = document.createElement('code');
+      kod.textContent = o.sorgu;
+      b.append(ad, aciklama, kod);
+      b.addEventListener('click', () => {
+        ornegiYukle(o.sorgu);
+        cekmeceKapat();
+      });
+      li.append(b);
+      ul.append(li);
+    }
+    parcalar.push(baslik, ul);
+  }
+  el.ornekListesi.replaceChildren(...parcalar);
 }
 
 function sorguyuAyarla(metin) {
@@ -268,10 +403,12 @@ function cekmeceAc(ad) {
   }
   el.cekmece.dataset.panel = ad;
   el.cekmece.hidden = false;
-  el.cekmeceBaslik.textContent = ad === 'alanlar' ? 'Alanlar ve fonksiyonlar' : 'Geçmiş';
+  el.cekmeceBaslik.textContent = { alanlar: 'Alanlar ve fonksiyonlar', gecmis: 'Geçmiş', ornekler: 'Örnek sorgular' }[ad];
   $('#cekmece-alanlar').hidden = ad !== 'alanlar';
   $('#cekmece-gecmis').hidden = ad !== 'gecmis';
+  $('#cekmece-ornekler').hidden = ad !== 'ornekler';
   if (ad === 'gecmis') gecmisiGoster();
+  if (ad === 'ornekler') ornekPaneliCiz();
 }
 
 function cekmeceKapat() {
@@ -298,9 +435,8 @@ function gecmisiGoster() {
     zaman.textContent = tarihBicim.format(new Date(g.zaman));
     b.append(kod, zaman);
     b.addEventListener('click', () => {
-      sorguyuAyarla(g.sorgu);
+      ornegiYukle(g.sorgu);
       cekmeceKapat();
-      el.sorgu.focus();
     });
     li.append(b);
     return li;
@@ -606,17 +742,27 @@ function temaBaslat() {
 
 function baslat() {
   temaBaslat();
-  ornekleriOlustur();
   disaAktarBaglantilari();
 
-  el.sorgu.value = oku(KAYIT.sorgu, ORNEKLER[0][1]);
+  el.sorgu.value = oku(KAYIT.sorgu, '');
   vurguyuGuncelle();
 
   el.sorgu.addEventListener('input', () => {
     hataKonumu = null;
     vurguyuGuncelle();
     yaz(KAYIT.sorgu, el.sorgu.value);
+    if (durum.sekme === 'olusturucu' && durum.uretilenSorgu !== null && el.sorgu.value !== durum.uretilenSorgu) {
+      el.sekmeNot.textContent = 'Sorgu elle değiştirildi. Oluşturucuda bir değişiklik yaparsanız onun yerine geçer.';
+    }
   });
+
+  $$('[data-sekme]').forEach((b) => b.addEventListener('click', () => sekmeAc(b.dataset.sekme)));
+  $$('[data-sistem]').forEach((b) => b.addEventListener('click', () => {
+    yaz(KAYIT.sistem, b.dataset.sistem === algilananSistem() ? null : b.dataset.sistem);
+    ornekleriOlustur();
+    ornekPaneliCiz();
+  }));
+  sekmeAc(oku(KAYIT.sekme, 'sql') === 'olusturucu' ? 'olusturucu' : 'sql');
   el.sorgu.addEventListener('scroll', () => {
     el.vurgu.parentElement.scrollTop = el.sorgu.scrollTop;
   });

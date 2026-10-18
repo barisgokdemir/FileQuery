@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -75,6 +76,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", files))
 	s.mux.HandleFunc("GET /api/schema", s.auth(s.handleSchema))
 	s.mux.HandleFunc("POST /api/query", s.auth(s.handleQuery))
+	s.mux.HandleFunc("POST /api/check", s.auth(s.handleCheck))
 	s.mux.HandleFunc("GET /api/export", s.auth(s.handleExport))
 	s.mux.HandleFunc("POST /api/reveal", s.auth(s.handleReveal))
 }
@@ -211,6 +213,9 @@ func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
 		"home":      home,
 		"separator": string(os.PathSeparator),
 		"maxRows":   s.maxRows,
+		// The server runs on the user's own machine, so this is their real OS.
+		"os":     runtime.GOOS,
+		"places": Places(),
 	})
 }
 
@@ -359,6 +364,33 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		"truncated":   truncated,
 		"maxRows":     s.maxRows,
 	}})
+}
+
+// handleCheck validates a query without scanning anything: it parses it and
+// checks that the folders exist. The query builder uses it for live feedback.
+func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
+	var req queryRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"hata": "geçersiz istek"})
+		return
+	}
+	q, err := query.Parse(req.Query)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"error": queryError(req.Query, err)})
+		return
+	}
+	for _, src := range q.Sources {
+		if _, err := engine.ResolveRoot(src); err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"error": errorJSON{Message: err.Error(), Pos: -1}})
+			return
+		}
+	}
+	cols := engine.Columns(q)
+	names := make([]string, len(cols))
+	for i, c := range cols {
+		names[i] = c.Name
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "columns": names})
 }
 
 func queryError(src string, err error) errorJSON {

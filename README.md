@@ -7,6 +7,8 @@ tarayıcıda grafik arayüzle ya da komut satırından kullanılır.
 
 ![FileQuery arayüzü](docs/arayuz.png)
 
+![Sorgu oluşturucu](docs/olusturucu.png)
+
 ## Kurulum
 
 [Releases](https://github.com/barisgokdemir/FileQuery/releases/latest) sayfasından işletim sisteminize uygun dosyayı
@@ -23,7 +25,11 @@ go install github.com/barisgokdemir/FileQuery/cmd/fq@latest
 Windows'ta **`fq.exe`'ye çift tıklayın**: bir konsol penceresi açılır ve tarayıcınızda arayüz kendiliğinden gelir.
 Komut satırından `fq --web` ile de başlatılabilir. Arayüzü kapatmak için konsol penceresini kapatmanız yeterli.
 
-- Renklendirmeli sorgu editörü, **Ctrl+Enter** ile çalıştırma, hazır örnek sorgular
+- **Sorgu oluşturucu:** SQL bilmeden klasör, koşullar (ad, uzantı, boyut, tarih, gizli…), gösterilecek sütunlar,
+  gruplama ve sıralama seçilerek sorgu kurulur; oluşan SQL canlı olarak denetlenir ve editörde görünür
+- **Sisteme göre örnekler:** İşletim sistemi otomatik algılanır; 19 hazır örnek kendi klasörlerinizi kullanır
+  (OneDrive'a taşınmış Masaüstü, Türkçe adlı Linux klasörleri dahil). Başka bir sistemin örnekleri de seçilebilir
+- Renklendirmeli sorgu editörü, **Ctrl+Enter** ile çalıştırma
 - Sonuçlar bulundukça tabloya akar; canlı "taranan / bulunan" sayacı ve **Durdur** (Esc) düğmesi
 - Sütun başlığına tıklayarak sıralama, satırdaki **Klasörde göster** ile dosyayı Gezgin'de seçili açma
 - **Excel** (Türkçe Excel'in doğrudan açtığı `;` ayraçlı UTF-8 CSV), CSV ve JSON olarak dışa aktarma
@@ -198,6 +204,9 @@ artırıp `main`'e göndermek yeterli: CI etiketi oluşturur ve Windows, Linux, 
 dosyaları Release'e ekler.
 
 ## Geçmiş
+
+**v2.1.2 (2026):** Sorgu oluşturucu; işletim sistemine ve kullanıcının gerçek klasörlerine göre 19 örnek sorgu;
+sorgunun çalıştırılmadan denetlenmesi (`/api/check`); `modified` ve `created` alanlarının açıklamaları netleştirildi.
 
 **v2.1.1 (2026):** Düzeltme: Windows'ta OneDrive'a yönlendirilmiş klasörler (Masaüstü, Belgeler) bağlantı sanılıp
 taranmıyordu.
