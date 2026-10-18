@@ -38,9 +38,10 @@ var staticFiles embed.FS
 
 const (
 	cookieName = "fq_oturum"
-	// DefaultMaxRows caps how many rows are sent to the browser for one query;
+	// DefaultMaxRows caps how many rows are sent to the browser for one query
+	// (a safety net for the browser's memory; the scan still counts the rest);
 	// larger results can still be exported in full.
-	DefaultMaxRows = 10000
+	DefaultMaxRows = 1000000
 )
 
 // Server is the HTTP handler for the browser interface.
@@ -254,8 +255,6 @@ type errorJSON struct {
 	Pos     int    `json:"pos"` // character (rune) offset; -1 when unknown
 }
 
-var errRowLimit = errors.New("satır sınırına ulaşıldı")
-
 // handleQuery runs a query and streams the result as newline-delimited JSON:
 //
 //	{"columns": [...]}
@@ -325,11 +324,12 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	truncated := false
+	// Past the cap the scan keeps going so the browser learns the real total,
+	// but no more rows are sent.
 	stats, runErr := engine.Run(ctx, q, engine.Options{Progress: &progress}, func(vals []query.Value) error {
 		if int(rows.Load()) >= s.maxRows {
-			truncated = true
-			return errRowLimit
+			rows.Add(1)
+			return nil
 		}
 		row := make([]any, len(vals))
 		for i, v := range vals {
@@ -349,7 +349,9 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	<-tickerDone
 	flushBatch()
 
-	if runErr != nil && !errors.Is(runErr, errRowLimit) {
+	total := rows.Load()
+	sent := min(total, int64(s.maxRows))
+	if runErr != nil {
 		if r.Context().Err() != nil {
 			return // the browser stopped the query
 		}
@@ -357,12 +359,13 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sw.send(map[string]any{"done": map[string]any{
-		"rows":        rows.Load(),
+		"rows":        sent,
+		"total":       total,
 		"scanned":     stats.Entries,
 		"denied":      stats.Denied,
 		"deniedPaths": stats.DeniedPaths,
 		"elapsedMs":   stats.Elapsed.Milliseconds(),
-		"truncated":   truncated,
+		"truncated":   total > sent,
 		"maxRows":     s.maxRows,
 	}})
 }
