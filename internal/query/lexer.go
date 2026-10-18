@@ -68,6 +68,21 @@ func Lex(src string) ([]Token, error) {
 			}
 			toks = append(toks, Token{Kind: TokNumber, Text: num, Suffix: src[sufStart:i], Pos: start})
 
+		case r == '@':
+			start := i
+			i++
+			for i < len(src) {
+				r2, w2 := utf8.DecodeRuneInString(src[i:])
+				if !unicode.IsLetter(r2) && !unicode.IsDigit(r2) && r2 != '_' {
+					break
+				}
+				i += w2
+			}
+			if i == start+1 {
+				return nil, &Error{Pos: start, Msg: "@ sonrasında liste adı bekleniyordu, ör. @resim"}
+			}
+			toks = append(toks, Token{Kind: TokSetRef, Text: src[start+1 : i], Pos: start})
+
 		case unicode.IsLetter(r) || r == '_':
 			start := i
 			for i < len(src) {

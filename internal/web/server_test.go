@@ -122,14 +122,18 @@ func TestSchema(t *testing.T) {
 	s, ts, _ := testServer(t)
 	resp := do(t, s, "GET", ts.URL+"/api/schema", "", true)
 	var sch struct {
-		Version   string      `json:"version"`
-		Fields    []fieldJSON `json:"fields"`
-		Functions []string    `json:"functions"`
-		OS        string      `json:"os"`
-		Places    []Place     `json:"places"`
+		Version   string       `json:"version"`
+		Fields    []fieldJSON  `json:"fields"`
+		Functions []string     `json:"functions"`
+		OS        string       `json:"os"`
+		Places    []Place      `json:"places"`
+		Sets      []extSetJSON `json:"sets"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&sch); err != nil {
 		t.Fatal(err)
+	}
+	if len(sch.Sets) != 5 || sch.Sets[0].Name != "resim" || len(sch.Sets[0].Exts) < 30 {
+		t.Errorf("hazır listeler: %+v", sch.Sets)
 	}
 	if sch.OS != runtime.GOOS || len(sch.Places) == 0 || sch.Places[0].Key != "home" {
 		t.Errorf("sistem bilgisi: os=%q yerler=%+v", sch.OS, sch.Places)

@@ -175,7 +175,7 @@ func TestErrors(t *testing.T) {
 		{`SELECT name FROM '.' WHERE LOWR(name) = 'a'`, 27, "LOWER mi demek istediniz"},
 		{`SELECT name FROM '.' WHERE LOWER() = 'a'`, 27, "1 argüman"},
 		{`SELECT name FROM '.' ORDER BY name extra`, 35, "sorgu burada bitmeliydi"},
-		{`SELECT name FROM '.' WHERE ext IN 'pdf'`, 34, "( bekleniyordu"},
+		{`SELECT name FROM '.' WHERE ext IN 'pdf'`, 34, "( veya hazır liste bekleniyordu"},
 		{`SELECT name FROM ''`, 17, "boş olamaz"},
 	}
 	for _, c := range cases {
@@ -257,5 +257,63 @@ func TestArith(t *testing.T) {
 	}
 	if v, _ := Arith("+", Int(2), Int(3)); v != Int(5) {
 		t.Errorf("2+3 = %v", v)
+	}
+}
+
+func TestExtSets(t *testing.T) {
+	q := mustParse(t, `SELECT name FROM '.' WHERE ext IN @resim AND ext NOT IN ('ico', 'svg')`)
+	and := q.Where.(*Binary)
+	in := and.L.(*In)
+	if len(in.List) != len(ExtSets[0].Exts) || in.Not {
+		t.Fatalf("@resim açılmadı: %d öğe", len(in.List))
+	}
+	has := map[string]bool{}
+	for _, e := range in.List {
+		has[e.(*Literal).Value.S] = true
+	}
+	for _, ext := range []string{"jpg", "png", "gif", "heic", "ico", "cr2"} {
+		if !has[ext] {
+			t.Errorf("@resim içinde %s yok", ext)
+		}
+	}
+
+	q = mustParse(t, `SELECT name FROM '.' WHERE ext NOT IN @VIDEO`)
+	if in := q.Where.(*In); !in.Not || len(in.List) != len(ExtSets[1].Exts) {
+		t.Errorf("NOT IN @VIDEO: %v", q.Where)
+	}
+
+	q = mustParse(t, `SELECT name FROM '.' WHERE ext IN (@ses, @image, 'pdf')`)
+	if in := q.Where.(*In); len(in.List) != len(ExtSets[2].Exts)+len(ExtSets[0].Exts)+1 {
+		t.Errorf("karma liste: %d", len(in.List))
+	}
+	for _, alias := range []string{"@arşiv", "@archive", "@Belge", "@documents", "@müzik"} {
+		mustParse(t, `SELECT name FROM '.' WHERE ext IN `+alias)
+	}
+}
+
+func TestExtSetsHaveNoDuplicates(t *testing.T) {
+	for _, s := range ExtSets {
+		seen := map[string]bool{}
+		for _, e := range s.Exts {
+			if seen[e] || e != strings.ToLower(e) || strings.HasPrefix(e, ".") {
+				t.Errorf("@%s: hatalı veya yinelenen uzantı %q", s.Name, e)
+			}
+			seen[e] = true
+		}
+	}
+}
+
+func TestExtSetErrors(t *testing.T) {
+	cases := []struct{ src, contains string }{
+		{`SELECT name FROM '.' WHERE ext IN @resm`, "@resim mi demek istediniz"},
+		{`SELECT name FROM '.' WHERE ext IN @xyzabc`, "kullanılabilenler: @resim, @video"},
+		{`SELECT name FROM '.' WHERE ext = @resim`, "sadece IN ile"},
+		{`SELECT name FROM '.' WHERE ext IN @`, "liste adı bekleniyordu"},
+	}
+	for _, c := range cases {
+		_, err := Parse(c.src)
+		if err == nil || !strings.Contains(err.Error(), c.contains) {
+			t.Errorf("%s: %v", c.src, err)
+		}
 	}
 }

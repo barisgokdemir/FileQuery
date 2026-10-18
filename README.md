@@ -27,7 +27,7 @@ Komut satırından `fq --web` ile de başlatılabilir. Arayüzü kapatmak için 
 
 - **Sorgu oluşturucu:** SQL bilmeden klasör, koşullar (ad, uzantı, boyut, tarih, gizli…), gösterilecek sütunlar,
   gruplama ve sıralama seçilerek sorgu kurulur; oluşan SQL canlı olarak denetlenir ve editörde görünür
-- **Sisteme göre örnekler:** İşletim sistemi otomatik algılanır; 19 hazır örnek kendi klasörlerinizi kullanır
+- **Sisteme göre örnekler:** İşletim sistemi otomatik algılanır; 25 hazır örnek kendi klasörlerinizi kullanır
   (OneDrive'a taşınmış Masaüstü, Türkçe adlı Linux klasörleri dahil). Başka bir sistemin örnekleri de seçilebilir
 - Renklendirmeli sorgu editörü, **Ctrl+Enter** ile çalıştırma
 - Sonuçlar bulundukça tabloya akar; canlı "taranan / bulunan" sayacı ve **Durdur** (Esc) düğmesi
@@ -152,6 +152,26 @@ Metin karşılaştırmaları ve `LIKE`, Windows'taki dosya adları gibi **büyü
 `MATCHES` Go düzenli ifadelerini kullanır ve harf duyarlıdır; duyarsız arama için `(?i)` ekleyin.
 NULL içeren karşılaştırmalar SQL'deki gibi yanlış sayılır; bu yüzden `size > 1 MB` klasörleri hiçbir zaman döndürmez.
 
+### Hazır uzantı listeleri
+
+Uzantıları tek tek yazmak yerine hazır listeler kullanılabilir. İstemediğiniz uzantıları `NOT IN` ile çıkarın:
+
+```sql
+SELECT name, size FROM '~' WHERE ext IN @resim AND ext NOT IN ('ico', 'svg')
+SELECT name, size FROM '~' WHERE ext IN (@resim, @video)
+```
+
+| Liste | Uzantılar |
+|---|---|
+| `@resim` | jpg, jpeg, jpe, jfif, png, gif, bmp, dib, tif, tiff, webp, heic, heif, avif, jxl, ico, cur, svg, svgz, psd, xcf, tga, exr, hdr, emf, wmf, pcx, raw, dng, cr2, cr3, nef, arw, orf, rw2, raf |
+| `@video` | mp4, m4v, mkv, mov, avi, wmv, webm, flv, f4v, mpg, mpeg, mpe, m2v, 3gp, 3g2, ts, mts, m2ts, vob, ogv, rm, rmvb, asf, divx, mxf, dv, qt |
+| `@ses` | mp3, wav, flac, m4a, aac, ogg, oga, opus, wma, aiff, aif, alac, ape, mid, midi, amr, mka, wv, ac3, dts |
+| `@belge` | pdf, doc, docx, docm, dot, dotx, odt, rtf, txt, md, xls, xlsx, xlsm, xlsb, ods, csv, tsv, ppt, pptx, pptm, pps, ppsx, odp, pages, numbers, key, epub, xps, djvu |
+| `@arsiv` | zip, rar, 7z, tar, gz, tgz, bz2, tbz2, xz, txz, zst, lz, lzma, z, cab, iso, img, dmg, arj, lzh |
+
+İngilizce adlar da çalışır: `@image`, `@audio`, `@document`, `@archive`. Sorgu oluşturucuda Uzantı koşulunda
+"Resim (hazır liste)" seçildiğinde uzantılar etiket olarak gösterilir; istemediğinize tıklayıp çıkarabilirsiniz.
+
 ### Fonksiyonlar
 
 `NOW()`, `TODAY()`, `LOWER(x)`, `UPPER(x)`, `LEN(x)`, `YEAR(t)`, `MONTH(t)`, `DAY(t)`
@@ -204,6 +224,9 @@ artırıp `main`'e göndermek yeterli: CI etiketi oluşturur ve Windows, Linux, 
 dosyaları Release'e ekler.
 
 ## Geçmiş
+
+**v2.1.3 (2026):** Hazır uzantı listeleri (`@resim`, `@video`, `@ses`, `@belge`, `@arsiv`); oluşturucuda etiketle
+uzantı çıkarma; resim, video, ses ve arşiv örnekleri (toplam 25 örnek).
 
 **v2.1.2 (2026):** Sorgu oluşturucu; işletim sistemine ve kullanıcının gerçek klasörlerine göre 19 örnek sorgu;
 sorgunun çalıştırılmadan denetlenmesi (`/api/check`); `modified` ve `created` alanlarının açıklamaları netleştirildi.

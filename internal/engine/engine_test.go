@@ -350,3 +350,22 @@ func TestUnreadableDirectoriesAreCounted(t *testing.T) {
 		t.Errorf("erişilemeyen klasör sayılmadı: %+v", stats.ScanStats)
 	}
 }
+
+func TestExtSetQuery(t *testing.T) {
+	root := t.TempDir()
+	for _, n := range []string{"tatil.JPG", "animasyon.gif", "simge.ico", "film.mkv", "rapor.pdf", "sarki.flac"} {
+		os.WriteFile(filepath.Join(root, n), []byte("x"), 0o644)
+	}
+	rows, _ := runQuery(t, q(root, "WHERE ext IN @resim AND ext NOT IN ('ico')"), Options{})
+	if got := strings.Join(sorted(names(rows)), ","); got != "animasyon.gif,tatil.JPG" {
+		t.Errorf("@resim - ico: %s", got)
+	}
+	rows, _ = runQuery(t, q(root, "WHERE ext IN (@video, @ses)"), Options{})
+	if got := strings.Join(sorted(names(rows)), ","); got != "film.mkv,sarki.flac" {
+		t.Errorf("@video + @ses: %s", got)
+	}
+	rows, _ = runQuery(t, q(root, "WHERE ext NOT IN (@resim, @video, @ses)"), Options{})
+	if got := strings.Join(names(rows), ","); got != "rapor.pdf" {
+		t.Errorf("NOT IN: %s", got)
+	}
+}

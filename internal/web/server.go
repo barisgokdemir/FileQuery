@@ -216,6 +216,7 @@ func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
 		// The server runs on the user's own machine, so this is their real OS.
 		"os":     runtime.GOOS,
 		"places": Places(),
+		"sets":   extSetsJSON(),
 	})
 }
 
@@ -494,4 +495,18 @@ func (s *streamWriter) close() {
 	s.mu.Lock()
 	s.closed = true
 	s.mu.Unlock()
+}
+
+type extSetJSON struct {
+	Name string   `json:"name"`
+	Desc string   `json:"desc"`
+	Exts []string `json:"exts"`
+}
+
+func extSetsJSON() []extSetJSON {
+	out := make([]extSetJSON, len(query.ExtSets))
+	for i, s := range query.ExtSets {
+		out[i] = extSetJSON{s.Name, s.Desc, s.Exts}
+	}
+	return out
 }
